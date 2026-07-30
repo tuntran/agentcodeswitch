@@ -1,0 +1,24 @@
+# Go
+*.test
+*.out
+
+# Wails build artifacts (build/ itself is tracked: appicon.png, darwin/Info*.plist)
+build/bin/
+
+# Frontend (Vite/TS)
+frontend/node_modules/
+frontend/dist/
+frontend/wailsjs/
+
+# Test fixtures that must never be committed (real keychain/API captures)
+**/testdata/raw/
+
+# Local tooling state, not project source
+.agentkit/
+
+# OS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/

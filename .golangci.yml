@@ -1,0 +1,27 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - gosec
+    - revive
+
+  settings:
+    gosec:
+      excludes:
+        - G204 # exec with variable args is the whole point of internal/wrap and internal/login
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
