@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "name": "per",
+      "state": "ok",
+      "message": "quota is current",
+      "stale": false,
+      "fetchedAt": "2026-07-30T10:00:00Z",
+      "fiveHour": {
+        "utilization": 5,
+        "resetsAt": "2026-07-30T12:00:00Z",
+        "severity": "neutral"
+      },
+      "sevenDay": {
+        "utilization": 91,
+        "resetsAt": "2026-08-01T00:00:00Z",
+        "severity": "attention"
+      },
+      "limits": [
+        {
+          "kind": "session",
+          "group": "session",
+          "percent": 5,
+          "severity": "neutral",
+          "resetsAt": "2026-07-30T12:00:00Z"
+        }
+      ]
+    },
+    {
+      "name": "com",
+      "state": "unavailable",
+      "message": "quota unavailable: connection refused",
+      "stale": false,
+      "fetchedAt": "2026-07-30T10:00:00Z",
+      "fiveHour": null,
+      "sevenDay": null,
+      "lastKnown": {
+        "fetchedAt": "2026-07-30T09:00:00Z",
+        "fiveHour": {
+          "utilization": 12,
+          "severity": "neutral"
+        },
+        "sevenDay": null
+      }
+    }
+  ]
+}
