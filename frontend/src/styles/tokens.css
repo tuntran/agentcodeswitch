@@ -1,0 +1,103 @@
+/* Tokens copied from docs/design-system.md. Keep the two in step. */
+:root {
+  /* Deep Teal — foundation */
+  --teal-900: #01333a;
+  --teal-800: #025864;
+  --teal-700: #1f6e77;
+  --teal-600: #3d848b;
+  --teal-500: #5c9aa0;
+  --teal-300: #9dc2c5;
+  --teal-100: #d9e7e8;
+
+  /* Signal Green — interaction only, never a value */
+  --green-700: #00a362;
+  --green-600: #00bd70;
+  --green-500: #00d47e;
+  --green-100: #ccf7e5;
+
+  /* Neutrals */
+  --ink-900: #0e1d22;
+  --ink-700: #33454b;
+  --ink-500: #5e7076;
+  --ink-400: #8a989d;
+  --gray-200: #d7dde0;
+  --gray-100: #e4e8eb;
+  --gray-50: #f2f4f6;
+  --white: #ffffff;
+
+  /* State — no "success" token by design */
+  --state-neutral: #5e7076;
+  --state-neutral-bg: #f2f4f6;
+  --state-attention: #8a5b08;
+  --state-attention-bg: #fcf2dc;
+  --state-attention-mark: #e8a317;
+  --state-tracked: #1a5fcc;
+  --state-tracked-bg: #e4effe;
+  --state-linked: #025864;
+  --state-linked-bg: #d9e7e8;
+  --state-fault: #c4123c;
+  --state-fault-bg: #fde7ed;
+  --state-absent: #8a989d;
+
+  /* Typography */
+  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, "Cascadia Mono", "Roboto Mono", monospace;
+  --fs-metric: 26px;
+  --fs-h1: 28px;
+  --fs-h2: 20px;
+  --fs-h3: 16px;
+  --fs-body: 15px;
+  --fs-dense: 14px;
+  --fs-small: 13px;
+  --fs-caption: 11px;
+  --fs-mono: 13px;
+  --fs-mono-sm: 12px;
+
+  /* Spacing, 4px grid */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+
+  /* Density */
+  --row-h: 36px;
+  --row-pad-y: 10px;
+  --row-pad-x: 12px;
+  --card-pad: 20px;
+
+  /* Radius */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-full: 999px;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(14, 29, 34, 0.06);
+  --shadow-md: 0 4px 12px rgba(14, 29, 34, 0.08);
+
+  /* Motion */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --t-fast: 120ms;
+  --t-base: 200ms;
+
+  /* Focus */
+  --focus-ring: 2px solid var(--green-700);
+  --focus-offset: 2px;
+}
+
+*:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-property: opacity;
+    transform: none !important;
+  }
+}

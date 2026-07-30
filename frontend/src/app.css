@@ -1,0 +1,392 @@
+/* Styles for the acs desktop app. See docs/design-system.md. */
+
+body {
+  margin: 0;
+  background: var(--gray-100);
+  color: var(--ink-900);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Topbar */
+.topbar {
+  display: flex;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-6);
+  background: var(--white);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.topbar__tab {
+  border: 0;
+  background: transparent;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: var(--fs-dense);
+  color: var(--ink-500);
+  cursor: pointer;
+}
+
+.topbar__tab:hover {
+  background: var(--gray-50);
+}
+
+/* The active tab is marked by weight and an underline, not a green fill: green
+   means interaction in this system, never state. */
+.topbar__tab--active {
+  color: var(--ink-900);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--teal-800);
+}
+
+.content {
+  flex: 1;
+  padding: var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+/* Page header */
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: var(--fs-h1);
+  font-weight: 600;
+}
+
+.page-header__note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--ink-500);
+}
+
+/* Card */
+.card {
+  background: var(--white);
+  border-radius: var(--r-lg);
+  padding: var(--card-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.quota-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--sp-4);
+}
+
+.quota-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.quota-card__header h3 {
+  margin: 0;
+  font-size: var(--fs-h3);
+  font-weight: 600;
+}
+
+/* Bar list. There are no pie, donut, or line charts in this design system. */
+.bar-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 52px;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-dense);
+}
+
+.bar-row__label {
+  color: var(--ink-500);
+}
+
+.bar-row__track {
+  height: 8px;
+  border-radius: var(--r-full);
+  background: var(--gray-50);
+  overflow: hidden;
+}
+
+.bar-row__fill {
+  height: 100%;
+  border-radius: var(--r-full);
+  background: var(--teal-600);
+  transition: width var(--t-base) var(--ease);
+}
+
+.bar-row__fill--attention {
+  background: var(--state-attention-mark);
+}
+
+.bar-row__value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bar-row__resets {
+  grid-column: 2 / -1;
+  font-size: var(--fs-caption);
+  color: var(--ink-400);
+}
+
+/* Absence marker. Never a zero. */
+.absent {
+  color: var(--state-absent);
+  font-style: italic;
+}
+
+/* Chip */
+.chip {
+  display: inline-block;
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-full);
+  font-size: var(--fs-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chip--neutral {
+  background: var(--state-neutral-bg);
+  color: var(--state-neutral);
+}
+
+.chip--attention {
+  background: var(--state-attention-bg);
+  color: var(--state-attention);
+}
+
+/* Banner. Not dismissible: it explains the data below it. */
+.banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  border-left: 3px solid var(--state-tracked);
+  background: var(--state-tracked-bg);
+  font-size: var(--fs-small);
+}
+
+.banner__text {
+  margin: 0;
+  flex: 1 1 240px;
+}
+
+.banner--info {
+  border-left-color: var(--state-tracked);
+  background: var(--state-tracked-bg);
+}
+
+.banner--attention {
+  border-left-color: var(--state-attention-mark);
+  background: var(--state-attention-bg);
+  color: var(--state-attention);
+}
+
+.banner--fault {
+  border-left-color: var(--state-fault);
+  background: var(--state-fault-bg);
+  color: var(--state-fault);
+}
+
+/* Buttons */
+.btn {
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  padding: var(--sp-2) var(--sp-3);
+  font: inherit;
+  font-size: var(--fs-small);
+  cursor: pointer;
+  background: var(--white);
+  color: var(--ink-900);
+}
+
+.btn--primary {
+  background: var(--teal-800);
+  color: var(--white);
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: var(--gray-200);
+  color: var(--ink-700);
+}
+
+.btn--danger {
+  background: transparent;
+  border-color: var(--state-fault);
+  color: var(--state-fault);
+}
+
+.btn--icon {
+  background: transparent;
+  border: 0;
+  padding: 0 var(--sp-1);
+  font-size: var(--fs-mono);
+  line-height: 1;
+  color: var(--ink-500);
+}
+
+.input {
+  border: 1px solid var(--gray-200);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2) var(--sp-3);
+  font: inherit;
+  font-size: var(--fs-small);
+  background: var(--white);
+}
+
+/* Table, compact scale */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--white);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  font-size: var(--fs-dense);
+}
+
+.table th {
+  text-align: left;
+  font-size: var(--fs-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-400);
+  font-weight: 500;
+  padding: var(--row-pad-y) var(--row-pad-x);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.table td {
+  height: var(--row-h);
+  padding: var(--row-pad-y) var(--row-pad-x);
+  border-bottom: 1px solid var(--gray-50);
+  vertical-align: middle;
+}
+
+.table tbody tr:hover {
+  background: var(--gray-50);
+}
+
+.table__actions {
+  display: flex;
+  gap: var(--sp-2);
+  white-space: nowrap;
+}
+
+/* Copy field, the signature pattern */
+.copy-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  max-width: 260px;
+}
+
+.copy-field__value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  color: var(--ink-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Doctor checks */
+.check {
+  display: grid;
+  grid-template-columns: 16px 90px 1fr;
+  gap: var(--sp-2);
+  align-items: baseline;
+  font-size: var(--fs-dense);
+  padding: var(--sp-1) 0;
+}
+
+.check__mark {
+  text-align: center;
+}
+
+.check--ok .check__mark {
+  color: var(--state-neutral);
+}
+
+.check--warn .check__mark {
+  color: var(--state-attention-mark);
+}
+
+.check--fail .check__mark {
+  color: var(--state-fault);
+}
+
+.check__name {
+  color: var(--ink-500);
+}
+
+.check__detail {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-sm);
+  color: var(--ink-700);
+  overflow-wrap: anywhere;
+}
+
+.check__action {
+  grid-column: 2 / -1;
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-small);
+  color: var(--state-attention);
+}
+
+/* Empty state. No illustration, no cheerful voice. */
+.empty-state {
+  max-width: 400px;
+  margin: var(--sp-12) auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.empty-state h3 {
+  margin: 0;
+  font-size: var(--fs-h3);
+  font-weight: 600;
+}
+
+.empty-state__detail {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--ink-500);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--ink-500);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
