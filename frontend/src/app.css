@@ -55,6 +55,14 @@ body {
   gap: var(--sp-4);
 }
 
+/* A view's body, where banners, cards and notes stack. Without this they sit
+   flush against each other and two cards read as one. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
 /* Page header */
 .page-header {
   display: flex;

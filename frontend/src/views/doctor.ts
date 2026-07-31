@@ -13,6 +13,7 @@ export function renderDoctorView(container: HTMLElement): void {
   header.append(title);
 
   const body = document.createElement("div");
+  body.className = "stack";
   container.replaceChildren(header, body);
 
   const shallow = document.createElement("button");
