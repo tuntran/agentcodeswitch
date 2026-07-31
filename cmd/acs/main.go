@@ -62,6 +62,8 @@ func run(args []string) error {
 		return cmdAdd(args[1:])
 	case "login":
 		return cmdLogin(args[1:])
+	case "link":
+		return cmdLink(args[1:])
 	case "rm":
 		return cmdRm(args[1:])
 	case "quota":
@@ -158,6 +160,7 @@ func usage(w io.Writer) {
   acs <profile> [claude args...]   launch claude for a profile
   acs add <name> [--email addr]    create a profile and log in
   acs login <name> [--force]       re-authenticate a profile
+  acs link <name> [--replace]      share skills/agents/hooks with ~/.claude
   acs ls [--json]                  list profiles with cached quota
   acs quota [--json] [--force]     fetch live quota
   acs doctor [--deep] [--json]     self-check; --deep reads secrets

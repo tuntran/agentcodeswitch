@@ -114,9 +114,14 @@ func Run(cs profile.CredStore, deep bool) Report {
 			continue
 		}
 		known = append(known, cs.ServiceName(lit))
+		p, resolveErr := profile.Get(name)
 		pr.Checks = append(pr.Checks,
 			checkKeychain(cs, name, lit),
-			checkIdentity(name, lit, f.Profiles[name]))
+			checkIdentity(name, lit, f.Profiles[name]),
+			checkOnboarding(name, lit))
+		if resolveErr == nil {
+			pr.Checks = append(pr.Checks, checkTooling(name, p))
+		}
 		if deep {
 			pr.Checks = append(pr.Checks, deepChecks(cs, name, lit)...)
 		}

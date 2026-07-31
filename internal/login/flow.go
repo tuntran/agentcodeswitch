@@ -17,6 +17,9 @@ type Result struct {
 	// to see -- above all, a Keychain item appearing under an unexpected name,
 	// which means the frozen literal is wrong.
 	Warnings []string
+	// Links reports the shared tooling wired up for a new profile, empty for a
+	// re-login of an existing one.
+	Links []profile.LinkResult
 }
 
 // ErrNotLoggedIn means `claude auth login` exited zero but nobody is authenticated.
@@ -34,6 +37,20 @@ func Add(cs profile.CredStore, name, label, email string) (Result, error) {
 		return Result{}, err
 	}
 
+	// Both of these run BEFORE the login, and the order matters.
+	//
+	// CLAUDE_CONFIG_DIR moves the entire config dir, so without the links the new
+	// profile has no skills, agents, hooks or settings -- a bare Claude Code.
+	// Linking first also means the settings.json that `claude auth login` creates
+	// writes through the symlink instead of becoming a competing real file.
+	//
+	// Marking onboarding first likewise avoids a first run that opens the wizard and
+	// looks like the login failed.
+	links, linkErr := profile.LinkShared(p, false)
+	if linkErr == nil {
+		linkErr = profile.MarkOnboarded(p.Literal)
+	}
+
 	res, err := authenticate(cs, p, email)
 	if err != nil {
 		// Roll back only what this command created. DiscardNew leaves the Keychain
@@ -43,6 +60,14 @@ func Add(cs profile.CredStore, name, label, email string) (Result, error) {
 		}
 		return Result{}, err
 	}
+	// Reported rather than fatal: an authenticated profile with no shared tooling is
+	// usable, just stripped down, and failing the add would throw away a completed
+	// login over a symlink. `acs doctor` repeats this, and `acs link` fixes it.
+	if linkErr != nil {
+		res.Warnings = append(res.Warnings,
+			"shared tooling was not linked: "+linkErr.Error()+" -- run `acs link "+name+"`")
+	}
+	res.Links = links
 	return res, nil
 }
 

@@ -72,20 +72,46 @@ func credentialBlob(t *testing.T, scopes []string, expiresAt time.Time) string {
 }
 
 // setupHealthy creates one fully working profile.
+//
+// HOME is redirected too, so the shared-tooling check reads a fixture rather than
+// the developer's real ~/.claude.
 func setupHealthy(t *testing.T) (*fakeCredStore, profile.Profile) {
 	t.Helper()
-	t.Setenv("ACS_HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("ACS_HOME", filepath.Join(home, ".acs"))
+	seedDefaultConfigDir(t)
 
 	p, err := profile.Create("per", "Personal")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	writeClaudeJSON(t, p.Literal.String(), "alice@example.com")
+	if _, err := profile.LinkShared(p, false); err != nil {
+		t.Fatalf("LinkShared: %v", err)
+	}
+	if err := profile.MarkOnboarded(p.Literal); err != nil {
+		t.Fatalf("MarkOnboarded: %v", err)
+	}
 
 	cs := &fakeCredStore{items: map[string]string{}}
 	cs.items[cs.ServiceName(p.Literal)] = credentialBlob(t,
 		[]string{profile.ScopeProfile, "user:inference"}, time.Now().Add(8*time.Hour))
 	return cs, p
+}
+
+// seedDefaultConfigDir builds a minimal ~/.claude holding shareable tooling.
+func seedDefaultConfigDir(t *testing.T) {
+	t.Helper()
+	root := profile.DefaultConfigDir()
+	for _, name := range []string{"skills", "agents", "hooks"} {
+		if err := os.MkdirAll(filepath.Join(root, name), 0o700); err != nil {
+			t.Fatalf("seed %s: %v", name, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "settings.json"), []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("seed settings.json: %v", err)
+	}
 }
 
 func writeClaudeJSON(t *testing.T, dir, email string) {
@@ -107,10 +133,13 @@ func TestRunHealthyProfilePasses(t *testing.T) {
 	if r.Deep {
 		t.Error("Deep = true for a shallow run")
 	}
-	// A shallow run reports literal, keychain and identity -- and nothing that
-	// needed a secret.
-	if len(r.Profiles) != 1 || len(r.Profiles[0].Checks) != 3 {
-		t.Fatalf("checks = %+v, want 3", r.Profiles)
+	// Asserted by name rather than by count: a count breaks whenever a check is
+	// added and says nothing about which ones ran.
+	if len(r.Profiles) != 1 {
+		t.Fatalf("profiles = %+v, want 1", r.Profiles)
+	}
+	for _, want := range []string{"literal", "keychain", "identity", "onboarding", "tooling"} {
+		findCheck(t, r, "per", want)
 	}
 	for _, c := range r.Profiles[0].Checks {
 		if c.Name == "scope" || c.Name == "expiry" {

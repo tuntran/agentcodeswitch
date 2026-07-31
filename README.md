@@ -78,6 +78,7 @@ per Go file, no tokens in the cache, no full email addresses in `plans/reports/`
 |---|---|
 | `acs add <name> [--email addr]` | create profile, delegate to `claude auth login` |
 | `acs login <name>` | re-authenticate an existing profile |
+| `acs link <name> [--replace]` | share skills, agents, hooks and settings with `~/.claude` |
 | `acs ls` | profiles, identity and cached quota — never hits the network |
 | `acs <name> [claude args…]` | launch `claude` for that profile, args passed through |
 | `acs quota [--json] [--force]` | live quota for every profile |
@@ -86,7 +87,33 @@ per Go file, no tokens in the cache, no full email addresses in `plans/reports/`
 | `acs ui` | launch the desktop app |
 
 Profile names are ASCII lowercase `[a-z0-9_-]`. These names are reserved:
-`add login ls rm report quota ui doctor help version`.
+`add login link ls rm report quota ui doctor help version`.
+
+## Profiles share your tooling, not your account
+
+`CLAUDE_CONFIG_DIR` moves the whole configuration directory, so a profile would
+otherwise start with none of your skills, agents, hooks or settings. `acs add` wires
+them up; `acs link <name>` does it for a profile created before that existed.
+
+Shared by symlink from `~/.claude`, so there is one copy and no drift:
+
+    skills/  agents/  commands/  hooks/  rules/  plugins/  settings.json
+
+Kept per profile, because it belongs to the account:
+
+    .claude.json  projects/  todos/  history.jsonl  sessions/  caches
+
+Nothing is deleted. If real content is already in the way, `acs link` reports it and
+leaves it; `--replace` renames it aside first and tells you where it went.
+
+Two things follow from this. Sharing `settings.json` shares any secret inside it,
+such as an MCP `Authorization` header — keep a real `settings.json` in a profile you
+want kept separate. And MCP servers added with `claude mcp add` are written to
+`.claude.json`, which cannot be shared because it also holds your account identity;
+declare them under `mcpServers` in `settings.json` to share them.
+
+`acs doctor` reports the link status and whether the first-run wizard will appear, so
+neither is invisible.
 
 ## Your Claude Code history is irreplaceable
 

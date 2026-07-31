@@ -88,6 +88,53 @@ func checkIdentity(name string, lit profile.ConfigDirLiteral, e config.Entry) Ch
 	return Check{Name: "identity", Status: StatusOK, Detail: profile.RedactEmail(id.Email)}
 }
 
+// checkTooling reports whether the profile shares skills, agents, hooks and
+// settings with the default config dir.
+//
+// A warning rather than a failure: an unlinked profile authenticates and switches
+// correctly, it just runs a bare Claude Code with none of the user's tooling. That
+// is a usability problem, not credential corruption, so it must not change the exit
+// status -- but it is invisible otherwise, which is how it went unnoticed until
+// somebody asked why their skills were gone.
+func checkTooling(name string, p profile.Profile) Check {
+	var linked, blocked, absent []string
+	for _, r := range profile.SharedStatus(p) {
+		switch r.Outcome {
+		case profile.LinkAlreadyCorrect:
+			linked = append(linked, r.Name)
+		case profile.LinkSourceMissing:
+			absent = append(absent, r.Name)
+		default:
+			blocked = append(blocked, r.Name)
+		}
+	}
+	if len(blocked) == 0 {
+		return Check{
+			Name: "tooling", Status: StatusOK,
+			Detail: fmt.Sprintf("%d shared, %d not in %s",
+				len(linked), len(absent), profile.DefaultConfigDir()),
+		}
+	}
+	return Check{
+		Name: "tooling", Status: StatusWarn,
+		Detail: "not shared: " + strings.Join(blocked, " "),
+		Action: fmt.Sprintf("run `acs link %s` (add --replace if real files are in the way)", name),
+	}
+}
+
+// checkOnboarding catches the profile that is authenticated but still shows the
+// first-run wizard, which reads as a failed login.
+func checkOnboarding(name string, lit profile.ConfigDirLiteral) Check {
+	if profile.IsOnboarded(lit) {
+		return Check{Name: "onboarding", Status: StatusOK, Detail: "wizard will be skipped"}
+	}
+	return Check{
+		Name: "onboarding", Status: StatusWarn,
+		Detail: "first run will open the setup wizard, which looks like a failed login",
+		Action: fmt.Sprintf("run `acs link %s`", name),
+	}
+}
+
 // deepChecks read the credential itself, which is why they are opt-in.
 //
 // Scope is the check that matters most. Without user:profile the usage endpoint

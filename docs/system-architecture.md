@@ -70,6 +70,60 @@ Three independent defences, none sufficient alone:
 3. `acs doctor` reports a mismatch and finds orphaned Keychain items. It never
    repairs anything: a silent repair loses the old credential with nobody noticing.
 
+## The config dir holds more than credentials
+
+`CLAUDE_CONFIG_DIR` relocates the entire configuration directory, not just the
+credential lookup. A profile created without further work therefore starts with no
+skills, agents, hooks, plugins or settings — a bare Claude Code. "Switch account"
+is not what anyone means by that.
+
+The split is by ownership:
+
+| Belongs to the account — per profile | Belongs to the tool — shared |
+|---|---|
+| `.claude.json` (holds `oauthAccount`) | `skills/` |
+| `projects/`, `todos/`, `history.jsonl` | `agents/`, `commands/` |
+| `sessions/`, `session-states/`, `shell-snapshots/` | `hooks/`, `rules/` |
+| caches | `plugins/`, `settings.json` |
+
+Shared assets are **symlinked** from the default config dir. One copy, no drift, and
+editing either path edits the same file. Copying was never an option: skills alone
+run to hundreds of megabytes, and a copy diverges the moment either side changes.
+
+`profile.LinkShared` runs before the first login, which also stops
+`claude auth login` from creating a real `settings.json` that would compete with the
+link. `assertShareable` refuses to link anything on the per-profile list, because
+sharing `projects/` would merge two accounts' transcripts and sharing `.claude.json`
+would give both profiles one identity.
+
+Nothing is ever deleted. Real content already in the way is reported and left alone;
+`acs link --replace` renames it aside first.
+
+### Two consequences worth knowing
+
+**Sharing `settings.json` shares whatever is in it**, including any secret such as an
+MCP `Authorization` header. For one person's own profiles that is usually the point.
+For a profile meant to stay separate from personal tooling it may not be, and the
+remedy is to keep a real `settings.json` in that profile — `acs link` will report it
+as blocked and leave it alone.
+
+**MCP servers added with `claude mcp add` land in `.claude.json`**, which is
+per-profile and cannot be shared, because that same file holds `oauthAccount`. To
+share an MCP server across profiles, declare it under `mcpServers` in
+`settings.json` instead.
+
+### Onboarding
+
+A fresh config dir has no `hasCompletedOnboarding`, so the first run opens the
+first-run wizard — whose opening step is "Select login method". An authenticated
+profile then looks like a failed login, and the obvious response is to log in again
+when nothing is wrong. Same family of mistake as rendering an unknown quota as `0%`.
+
+`profile.MarkOnboarded` sets that one key. It is the only thing acs writes into
+`.claude.json`; the file is Claude Code's and everything else in it is read-only to
+acs. `acs doctor` reports the flag rather than assuming it, so a Claude Code change
+that stops honouring it surfaces as a report instead of a silent no-op.
+
 ## State on disk
 
 ```

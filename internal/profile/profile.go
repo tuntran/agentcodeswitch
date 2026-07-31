@@ -36,7 +36,7 @@ type Profile struct {
 // somebody creates a profile named report; adding `acs report` later then breaks
 // the grammar with no fix that does not take their profile away.
 var reserved = []string{
-	"add", "login", "ls", "rm", "report", "quota", "ui", "doctor", "help", "version",
+	"add", "login", "link", "ls", "rm", "report", "quota", "ui", "doctor", "help", "version",
 }
 
 // Reserved returns the names a profile may not use.
