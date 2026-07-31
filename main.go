@@ -23,7 +23,9 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
+		// --gray-100, the page background. A different colour here shows through
+		// as a flash on resize and before the first paint.
+		BackgroundColour: &options.RGBA{R: 228, G: 232, B: 235, A: 1},
 		OnStartup:        app.startup,
 		Bind: []interface{}{
 			app,

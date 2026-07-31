@@ -163,6 +163,11 @@ Monospace cells use the copy field.
 
 No sortable headers in v1: with two or three profiles, sorting solves nothing.
 
+A table wider than the window scrolls **inside itself**, never by scrolling the
+page. The accounts table carries three copy fields and a button pair, so at the
+1024px default width it is about 1340px wide; on the document that overflow
+carries the topbar and the page heading off screen.
+
 ### Metric qualifier
 
 Every number that has a caveat carries it in place: a `5h window` or `weekly` chip

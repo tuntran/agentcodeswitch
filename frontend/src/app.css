@@ -254,7 +254,17 @@ body {
   background: var(--white);
 }
 
-/* Table, compact scale */
+/* Table, compact scale.
+   The accounts table carries three copy fields and a button pair, so its
+   min-content width exceeds the window. The overflow is given a scroll container
+   of its own: left on the document it scrolls the whole page, carrying the
+   topbar and the page heading off screen. */
+.table-scroll {
+  overflow-x: auto;
+  border-radius: var(--r-lg);
+  background: var(--white);
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;

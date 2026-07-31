@@ -64,9 +64,9 @@ async function reload(container: HTMLElement): Promise<void> {
 }
 
 function table(profiles: ProfileView[], container: HTMLElement): HTMLElement {
-  const table = document.createElement("table");
-  table.className = "table";
-  table.innerHTML =
+  const el = document.createElement("table");
+  el.className = "table";
+  el.innerHTML =
     "<thead><tr><th>Profile</th><th>Label</th><th>Account</th><th>Plan</th>" +
     "<th>Keychain</th><th>Config dir</th><th>Org</th><th></th></tr></thead>";
 
@@ -74,8 +74,21 @@ function table(profiles: ProfileView[], container: HTMLElement): HTMLElement {
   for (const profile of profiles) {
     tbody.append(row(profile, container));
   }
-  table.append(tbody);
-  return table;
+  el.append(tbody);
+
+  // The table owns its horizontal overflow. Without this wrapper the eight
+  // columns widen the document itself and the topbar scrolls out of reach.
+  //
+  // Focusable and named on purpose: WebKit, which is the engine here, does not
+  // hand a scroll container to the keyboard the way Chrome does, so without
+  // tabindex the columns past the edge are mouse-only.
+  const scroll = document.createElement("div");
+  scroll.className = "table-scroll";
+  scroll.tabIndex = 0;
+  scroll.setAttribute("role", "region");
+  scroll.setAttribute("aria-label", "Accounts");
+  scroll.append(el);
+  return scroll;
 }
 
 function row(profile: ProfileView, container: HTMLElement): HTMLElement {
@@ -105,9 +118,11 @@ function row(profile: ProfileView, container: HTMLElement): HTMLElement {
   org.append(renderCopyField(profile.orgId, { placeholder: "—" }));
   tr.append(org);
 
-  const actions = document.createElement("td");
-  actions.className = "table__actions";
-  actions.append(
+  // The flex layout sits on an inner element: a td set to display:flex stops
+  // being a table cell, and the row no longer lines up with its headers.
+  const group = document.createElement("div");
+  group.className = "table__actions";
+  group.append(
     button("Remove", "btn--ghost", () =>
       showRemove(profile, container, false),
     ),
@@ -115,6 +130,8 @@ function row(profile: ProfileView, container: HTMLElement): HTMLElement {
       showRemove(profile, container, true),
     ),
   );
+  const actions = document.createElement("td");
+  actions.append(group);
   tr.append(actions);
   return tr;
 }
