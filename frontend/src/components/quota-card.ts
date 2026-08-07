@@ -14,20 +14,55 @@ type FailedState = Exclude<QuotaState, "ok">;
 // This module imports nothing from Wails on purpose: it stays a pure DOM function so
 // the tests can render every state without the generated bindings.
 
-/** How each non-ok state is presented, and what the user can do about it. */
+/** What clicking a card's action should do. */
+type CardAction = "login" | "retry" | "launch";
+
+/**
+ * How each non-ok state is presented, and what the user can do about it.
+ *
+ * `primary` defaults to "login", so only the states that need something else say so.
+ */
 const statePresentation: Record<
   FailedState,
-  { variant: "info" | "attention" | "fault"; action: string }
+  {
+    variant: "info" | "attention" | "fault";
+    action: string;
+    primary?: CardAction;
+    secondaryAction?: string;
+    secondaryKind?: CardAction;
+  }
 > = {
   no_login: { variant: "info", action: "Log in" },
+  // A genuine re-login, and the one case where it has to be done a specific way:
+  // the Claude subscription, not the Console.
   missing_scope: { variant: "fault", action: "Log in again" },
-  expired: { variant: "attention", action: "Log in again" },
-  unavailable: { variant: "info", action: "Retry" },
+  // An expired access token is self-healing -- Claude Code refreshes it on start --
+  // so sending someone to `acs login` asks them to redo work they do not need to.
+  // The login fallback stays one button over, for when the refresh token is dead too.
+  expired: {
+    variant: "attention",
+    action: "Open Claude Code",
+    primary: "launch",
+    secondaryAction: "Log in again",
+    secondaryKind: "login",
+  },
+  unavailable: { variant: "info", action: "Retry", primary: "retry" },
 };
 
 export interface QuotaCardHandlers {
   onLogin?: (profile: string) => void;
   onRetry?: (profile: string) => void;
+  /** Starts Claude Code for a profile, which is what refreshes an expired token. */
+  onLaunch?: (profile: string) => void;
+  /**
+   * Re-reads an ok card on demand.
+   *
+   * Returning the pending work lets the card own the button's in-flight state, so
+   * the two halves of "disable, then restore" stay in one place. On success the card
+   * is replaced and the button goes with it; on failure it has to come back, because
+   * a button stuck at disabled has nothing on screen explaining why.
+   */
+  onRefresh?: (profile: string) => Promise<unknown>;
 }
 
 /** Builds the card for one profile. */
@@ -47,11 +82,18 @@ export function renderQuotaCard(
   title.textContent = quota.name;
   header.append(title);
 
-  if (quota.state === "ok" && quota.stale) {
-    // A stale number shown as current is a lie of omission. Label it and say when.
-    header.append(
-      chip(`stale · fetched ${formatTime(quota.fetchedAt)}`, "neutral"),
-    );
+  if (quota.state === "ok") {
+    // The age is always shown, not only when stale. Without it a number from ten
+    // minutes ago is indistinguishable from one fetched a second ago, which is what
+    // made the dashboard feel stuck even when it was working.
+    const label = quota.stale
+      ? `stale · updated ${formatAge(quota.fetchedAt)}`
+      : `updated ${formatAge(quota.fetchedAt)}`;
+    const age = chip(label, "neutral");
+    // The age is rendered once and goes out of date until the next event, so keep
+    // the exact moment reachable on hover.
+    age.title = formatTime(quota.fetchedAt);
+    header.append(age, refreshButton(quota.name, handlers));
   }
   card.append(header);
 
@@ -65,6 +107,30 @@ export function renderQuotaCard(
 
   card.append(renderFailure(quota, quota.state, handlers));
   return card;
+}
+
+/** The on-demand refresh control for an ok card. */
+function refreshButton(
+  profile: string,
+  handlers: QuotaCardHandlers,
+): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "btn btn--ghost quota-card__refresh";
+  button.textContent = "Refresh";
+  button.addEventListener("click", () => {
+    const pending = handlers.onRefresh?.(profile);
+    if (!pending) return;
+    button.disabled = true;
+    // The label is kept rather than swapped for an ellipsis, so the button holds on
+    // to its accessible name while it is busy.
+    button.setAttribute("aria-busy", "true");
+    void pending.catch(() => {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+    });
+  });
+  return button;
 }
 
 /**
@@ -106,19 +172,61 @@ function renderFailure(
   }
 
   // Every failure gets a labelled action. "Error" on its own is a dead end.
+  const hasSecondary = Boolean(
+    presentation.secondaryAction && presentation.secondaryKind,
+  );
+  banner.append(
+    actionButton(
+      presentation.action,
+      presentation.primary ?? "login",
+      quota.name,
+      handlers,
+      // Only emphasised where there is a second action to be chosen over. A lone
+      // button is already unambiguous.
+      hasSecondary ? "primary" : "ghost",
+    ),
+  );
+  if (presentation.secondaryAction && presentation.secondaryKind) {
+    banner.append(
+      actionButton(
+        presentation.secondaryAction,
+        presentation.secondaryKind,
+        quota.name,
+        handlers,
+      ),
+    );
+  }
+  return banner;
+}
+
+/**
+ * One labelled action, dispatched by kind rather than by state.
+ *
+ * A card with two actions weights them: when both look the same, "primary" means
+ * nothing but left-to-right order, and the whole point of offering "Open Claude Code"
+ * ahead of "Log in again" is that the user picks the one that is not extra work.
+ */
+function actionButton(
+  label: string,
+  kind: CardAction,
+  profile: string,
+  handlers: QuotaCardHandlers,
+  emphasis: "primary" | "ghost" = "ghost",
+): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "btn btn--ghost";
-  button.textContent = presentation.action;
+  button.className = `btn btn--${emphasis}`;
+  button.textContent = label;
   button.addEventListener("click", () => {
-    if (state === "unavailable") {
-      handlers.onRetry?.(quota.name);
+    if (kind === "retry") {
+      handlers.onRetry?.(profile);
+    } else if (kind === "launch") {
+      handlers.onLaunch?.(profile);
     } else {
-      handlers.onLogin?.(quota.name);
+      handlers.onLogin?.(profile);
     }
   });
-  banner.append(button);
-  return banner;
+  return button;
 }
 
 /**
@@ -185,6 +293,29 @@ function chip(text: string, tone: "neutral" | "attention"): HTMLElement {
 function clampPercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+/**
+ * Formats how long ago a reading was taken. "" means unknown, never the epoch.
+ *
+ * Relative rather than absolute because the question a user actually has is "can I
+ * trust this number right now", and "4m ago" answers it without arithmetic.
+ */
+export function formatAge(value: string, now: Date = new Date()): string {
+  if (!value) return "unknown";
+  const when = new Date(value);
+  if (Number.isNaN(when.getTime())) return "unknown";
+
+  const seconds = Math.round((now.getTime() - when.getTime()) / 1000);
+  // A clock skew or a timestamp from the future reads as current rather than as a
+  // negative age.
+  if (seconds < 10) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
 /** Formats an RFC 3339 timestamp. "" means unknown, never the epoch. */

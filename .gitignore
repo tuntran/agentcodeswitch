@@ -16,6 +16,11 @@ frontend/wailsjs/
 # Local tooling state, not project source
 .agentkit/
 
+# Working notes: plans, phase files, and agent reports stay on the authoring
+# machine. They record intermediate reasoning, not the shipped contract, and
+# docs/ is the durable surface.
+plans/
+
 # OS
 .DS_Store
 

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -508,5 +509,274 @@ func TestBlocksOnlyForMissingCredential(t *testing.T) {
 		if Blocks(s) {
 			t.Errorf("Blocks(%s) = true; a quota failure must never stop a switch", s)
 		}
+	}
+}
+
+// advancingClock moves forward a fixed step on every read, so each profile in a pass
+// records a distinct FetchedAt. A pinned clock cannot exercise the bug where later
+// profiles were skipped for a whole cycle, because it makes every FetchedAt equal.
+func advancingClock(start time.Time, step time.Duration) func() time.Time {
+	current := start
+	return func() time.Time {
+		now := current
+		current = current.Add(step)
+		return now
+	}
+}
+
+// TestRefreshIgnoresTTL is the invariant behind the staleness fix, asserted directly
+// rather than inferred from a request count: the schedule owns the cadence, so a
+// cached entry still inside its TTL must not stop a scheduled refresh.
+func TestRefreshIgnoresTTL(t *testing.T) {
+	p, store := testProfile(t)
+	url, calls := serve(t, http.StatusOK, fullResponse, nil)
+	now := time.Now()
+	r := newReaderFor(store, url, now)
+
+	// Well inside the TTL, and past the churn floor.
+	if err := saveEntry(p.Name, entry{State: StateOK, FetchedAt: now.Add(-60 * time.Second)}); err != nil {
+		t.Fatalf("saveEntry: %v", err)
+	}
+	if !mustLoad(t, p.Name).fresh(now) {
+		t.Fatal("test setup is wrong: the entry must be fresh for this to prove anything")
+	}
+
+	res := r.Refresh(context.Background(), p)
+	if res.State != StateOK {
+		t.Fatalf("State = %s, want ok", res.State)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Errorf("requests = %d, want 1 -- a fresh cache must not stop a scheduled refresh", got)
+	}
+}
+
+// TestRefreshHonoursFloor keeps the churn guard honest. The dashboard restarts
+// Subscribe on every mount, so without this a user flicking between views issues one
+// full pass per flick.
+func TestRefreshHonoursFloor(t *testing.T) {
+	p, store := testProfile(t)
+	url, calls := serve(t, http.StatusOK, fullResponse, nil)
+	now := time.Now()
+	r := newReaderFor(store, url, now)
+
+	if err := saveEntry(p.Name, entry{State: StateOK, FetchedAt: now.Add(-5 * time.Second)}); err != nil {
+		t.Fatalf("saveEntry: %v", err)
+	}
+
+	r.Refresh(context.Background(), p)
+	if got := calls.Load(); got != 0 {
+		t.Errorf("requests = %d, want 0 within the %s floor", got, refreshFloor)
+	}
+}
+
+// TestRefreshHonoursBackoffButForceDoesNot pins the split that keeps the retry button
+// working. The button only ever appears on an unavailable card -- the state that
+// carries Retry-After -- so routing it through the scheduled path would make it a
+// permanent no-op.
+func TestRefreshHonoursBackoffButForceDoesNot(t *testing.T) {
+	p, store := testProfile(t)
+	url, calls := serve(t, http.StatusOK, fullResponse, nil)
+	now := time.Now()
+	r := newReaderFor(store, url, now)
+
+	retryAt := now.Add(10 * time.Minute)
+	if err := saveEntry(p.Name, entry{
+		State:      StateUnavailable,
+		FetchedAt:  now.Add(-2 * time.Hour),
+		RetryAfter: &retryAt,
+	}); err != nil {
+		t.Fatalf("saveEntry: %v", err)
+	}
+
+	r.Refresh(context.Background(), p)
+	if got := calls.Load(); got != 0 {
+		t.Errorf("Refresh requests = %d, want 0 while backing off", got)
+	}
+
+	r.Get(context.Background(), p, true)
+	if got := calls.Load(); got != 1 {
+		t.Errorf("force requests = %d, want 1 -- force must still override backoff", got)
+	}
+}
+
+// TestSubscribeRefreshesEveryProfileEveryPass locks both halves of the staleness bug:
+// the first pass runs before the first tick (so a fresh mount shows real numbers), and
+// every profile is refreshed in every pass regardless of how their FetchedAt values
+// drifted apart within the previous one.
+func TestSubscribeRefreshesEveryProfileEveryPass(t *testing.T) {
+	t.Setenv("ACS_HOME", t.TempDir())
+	var profiles []profile.Profile
+	for _, name := range []string{"one", "two", "three"} {
+		p, err := profile.Create(name, "")
+		if err != nil {
+			t.Fatalf("Create(%s): %v", name, err)
+		}
+		profiles = append(profiles, p)
+	}
+	store := &stubStore{blob: credBlob(`"user:profile"`, time.Now().Add(8*time.Hour))}
+	url, calls := serve(t, http.StatusOK, fullResponse, nil)
+
+	r := NewReader(store, "test")
+	r.client.baseURL = url
+	// Each read advances well past the floor, mirroring real per-profile drift.
+	r.now = advancingClock(time.Now(), 45*time.Second)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Long enough that a tick cannot already be buffered when the ninth result
+	// arrives: otherwise cancel() below races a third pass and the count is a
+	// coin flip.
+	results := r.Subscribe(ctx, profiles, 200*time.Millisecond)
+
+	// 3 cached + 3 from the pre-tick pass + 3 from the pass after one tick.
+	deadline := time.After(10 * time.Second)
+	for i := range 9 {
+		select {
+		case _, ok := <-results:
+			if !ok {
+				t.Fatalf("channel closed after %d results", i)
+			}
+		case <-deadline:
+			t.Fatalf("timed out after %d of 9 results", i)
+		}
+	}
+	cancel()
+
+	// One tick elapsed, so two passes ran: profiles x (ticks + 1).
+	if got := calls.Load(); got != 6 {
+		t.Errorf("requests = %d, want 6 (3 profiles x 2 passes) -- a later profile must not be skipped for a cycle", got)
+	}
+}
+
+func mustLoad(t *testing.T, name string) entry {
+	t.Helper()
+	e, ok := loadEntry(name)
+	if !ok {
+		t.Fatalf("loadEntry(%s) found nothing", name)
+	}
+	return e
+}
+
+// TestForceDoesNotClimbTheBackoffLadder keeps a human override from making the
+// schedule's penalty worse. The retry button reaches a throttled card by design, so
+// if each click advanced the ladder an impatient user could stall the background loop
+// for half an hour by asking for fresher numbers.
+func TestForceDoesNotClimbTheBackoffLadder(t *testing.T) {
+	p, store := testProfile(t)
+	// No Retry-After header, so the local ladder is what decides the delay.
+	url, _ := serve(t, http.StatusTooManyRequests, "", nil)
+	now := time.Now()
+	r := newReaderFor(store, url, now)
+
+	if err := saveEntry(p.Name, entry{
+		State:       StateUnavailable,
+		FetchedAt:   now.Add(-time.Hour),
+		BackoffStep: 3,
+	}); err != nil {
+		t.Fatalf("saveEntry: %v", err)
+	}
+
+	r.Get(context.Background(), p, true)
+
+	got := mustLoad(t, p.Name)
+	if got.BackoffStep != 3 {
+		t.Errorf("BackoffStep = %d after a forced refresh, want it held at 3", got.BackoffStep)
+	}
+	// Still records a retry time, just without lengthening the ladder.
+	if got.RetryAfter == nil {
+		t.Error("RetryAfter = nil; a 429 must still park the scheduled path")
+	}
+}
+
+// TestScheduledRefreshStillClimbsTheLadder is the other half: the automatic path must
+// keep backing off, or the fix above would remove the backoff entirely.
+func TestScheduledRefreshStillClimbsTheLadder(t *testing.T) {
+	p, store := testProfile(t)
+	url, _ := serve(t, http.StatusTooManyRequests, "", nil)
+	now := time.Now()
+	r := newReaderFor(store, url, now)
+
+	if err := saveEntry(p.Name, entry{
+		State:       StateUnavailable,
+		FetchedAt:   now.Add(-time.Hour),
+		BackoffStep: 3,
+	}); err != nil {
+		t.Fatalf("saveEntry: %v", err)
+	}
+
+	r.Refresh(context.Background(), p)
+
+	if got := mustLoad(t, p.Name).BackoffStep; got != 4 {
+		t.Errorf("BackoffStep = %d after a scheduled refresh, want 4", got)
+	}
+}
+
+// TestFloorToleratesAClockInTheFuture stops a backwards clock step, or a cache file
+// carried between machines, from disabling the scheduled refresh permanently.
+func TestFloorToleratesAClockInTheFuture(t *testing.T) {
+	p, store := testProfile(t)
+	url, calls := serve(t, http.StatusOK, fullResponse, nil)
+	now := time.Now()
+	r := newReaderFor(store, url, now)
+
+	if err := saveEntry(p.Name, entry{State: StateOK, FetchedAt: now.Add(2 * time.Hour)}); err != nil {
+		t.Fatalf("saveEntry: %v", err)
+	}
+
+	r.Refresh(context.Background(), p)
+	if got := calls.Load(); got != 1 {
+		t.Errorf("requests = %d, want 1 -- a future timestamp must not park refreshes forever", got)
+	}
+}
+
+// TestConcurrentFetchesKeepTheSuccessfulReading pins the cache against the one
+// pairing that makes its read-modify-write reachable: the refresh loop and the
+// card's Refresh button fetching the same profile at the same moment.
+//
+// The throttled path rebuilds the entire entry from the snapshot it read on entry
+// to get. Unserialised, a 429 landing after a 200 writes that 200 back out of
+// existence -- so the dashboard keeps painting numbers the cache no longer holds,
+// and `acs quota` in a terminal reports the profile as unavailable.
+func TestConcurrentFetchesKeepTheSuccessfulReading(t *testing.T) {
+	p, store := testProfile(t)
+	now := time.Now()
+
+	// The first caller through succeeds; everyone after is throttled, and slowly, so
+	// that an unlocked build reliably writes the stale rebuild last.
+	var calls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(fullResponse))
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+		w.Header().Set("Retry-After", "900")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	t.Cleanup(srv.Close)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// force: what the Refresh button sends, and the mode that skips every
+			// cache check and so always reaches the fetch.
+			newReaderFor(store, srv.URL, now).Get(context.Background(), p, true)
+		}()
+	}
+	wg.Wait()
+
+	e, ok := loadEntry(p.Name)
+	if !ok {
+		t.Fatal("no cache entry survived two concurrent fetches")
+	}
+	if e.FiveHour == nil {
+		t.Error("the successful reading was lost: the throttled write rebuilt the entry " +
+			"from a snapshot taken before that reading landed")
+	}
+	if e.RetryAfter == nil {
+		t.Error("Retry-After was lost: the endpoint asked us to wait and the cache did not record it")
 	}
 }
