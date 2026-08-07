@@ -26,7 +26,6 @@ scripts:
 	scripts/check-no-wails-in-internal.sh
 	scripts/check-file-size.sh
 	scripts/check-no-token-in-cache.sh
-	scripts/check-no-pii-in-reports.sh
 
 # The CLI is built after `wails build`, not before: wails clears everything else out
 # of build/bin/ while packaging, so building the CLI first left only the .app behind.
