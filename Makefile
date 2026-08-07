@@ -28,6 +28,11 @@ scripts:
 	scripts/check-no-token-in-cache.sh
 	scripts/check-no-pii-in-reports.sh
 
+# The CLI is built after `wails build`, not before: wails clears everything else out
+# of build/bin/ while packaging, so building the CLI first left only the .app behind.
+# The order matters because the .app shells out to the CLI -- the login and "open
+# Claude Code" buttons both resolve it -- so a build that silently drops it produces
+# an app whose buttons depend on whatever older `acs` happens to be on PATH.
 build:
-	go build -o build/bin/acs ./cmd/acs
 	wails build
+	go build -o build/bin/acs ./cmd/acs
