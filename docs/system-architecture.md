@@ -171,7 +171,10 @@ answering "what do I do now?":
 
 Tokens never reach disk: they live in memory for the duration of one fetch.
 `acs` does not refresh tokens; a bad writeback could break a session that is
-working fine.
+working fine. It does not need to: Claude Code refreshes its own token when it
+starts, so the remedy for `expired` is to start Claude Code, which is what the
+card's primary action does. Logging in again stays available beside it for the case
+where the refresh token is dead too.
 
 ### The JSON contract, in two lines
 
@@ -199,12 +202,23 @@ the whole point, and the label is what keeps it honest.
 |---|---|---|
 | `acs quota` | cache | **synchronous** fetch; on failure print the old value labelled stale |
 | `acs ls` | cache | cache, labelled stale — never any network call |
-| UI | cache | real stale-while-revalidate: render cache, refresh in a goroutine, emit an event |
+| UI | cache first for the initial paint, then **fetch anyway** — the ticker owns the cadence | same |
 
 Stale-while-revalidate in the CLI would be a bug that no obvious test catches: a
 CLI process lives a few hundred milliseconds, so the background goroutine dies
 before it can write, and the cache stays stale forever unless the user discovers
 `--force`.
+
+The UI is the one consumer the TTL does not apply to, and that is deliberate. Its
+ticker already paces the requests, so checking the TTL as well meant a reading had to
+outlive both the interval and the TTL before it was replaced — which made the numbers
+on screen up to twice the interval old, and let a second account be skipped for a
+whole cycle whenever its previous fetch happened to land a moment late. Two guards
+remain on that path: the endpoint's own `Retry-After`, and a floor of 30s so
+remounting the dashboard repeatedly cannot turn into a burst of full passes.
+
+An explicit `--force`, and every button on a quota card, skips both the TTL and the
+backoff. A person looking at a stalled card and clicking retry means it.
 
 ## Process model
 

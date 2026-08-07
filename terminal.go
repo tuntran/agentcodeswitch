@@ -55,11 +55,29 @@ func resolveACSBinary() (string, error) {
 
 // launchLoginTerminal opens Terminal.app running `acs login <name>`.
 func launchLoginTerminal(name string) error {
+	return runACSInTerminal("login", name)
+}
+
+// launchProfileTerminal opens Terminal.app running `acs <name>`, which is what makes
+// Claude Code start under that profile -- and refresh its own access token on the way
+// up. That is why an expired token offers this rather than a fresh login.
+func launchProfileTerminal(name string) error {
+	return runACSInTerminal("", name)
+}
+
+// runACSInTerminal runs `acs [subcommand] <name>` in a new Terminal window. An empty
+// subcommand means the bare `acs <name>` form.
+func runACSInTerminal(subcommand, name string) error {
 	bin, err := resolveACSBinary()
 	if err != nil {
 		return err
 	}
-	command := shellQuote(bin) + " login " + shellQuote(name)
+	command := shellQuote(bin)
+	if subcommand != "" {
+		command += " " + subcommand
+	}
+	command += " " + shellQuote(name)
+
 	script := fmt.Sprintf(
 		`tell application "Terminal"
 	activate

@@ -112,6 +112,11 @@ body {
   font-weight: 600;
 }
 
+/* Pushed to the trailing edge so the profile name and the age chip stay together. */
+.quota-card__refresh {
+  margin-left: auto;
+}
+
 /* Bar list. There are no pie, donut, or line charts in this design system. */
 .bar-row {
   display: grid;
@@ -225,6 +230,11 @@ body {
   cursor: pointer;
   background: var(--white);
   color: var(--ink-900);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .btn--primary {

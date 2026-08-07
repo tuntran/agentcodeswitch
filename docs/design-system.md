@@ -97,11 +97,16 @@ different visual treatment because each has a different fix.
 |---|---|---|
 | `ok`, severity neutral | `state-neutral` | bar, `teal-600` fill |
 | `ok`, severity attention | `state-attention` | bar with `state-attention-mark` fill + `attention` chip |
-| `ok` but stale | `state-neutral` | bar, plus a `stale` chip and the fetch time |
+| `ok` but stale | `state-neutral` | bar, plus a `stale` prefix on the age chip |
 | `no_login` | `state-absent` | em dash + "not logged in" + action button |
 | `missing_scope` | `state-fault` | em dash + fault banner + action |
-| `expired` | `state-attention` | em dash + attention banner + action |
+| `expired` | `state-attention` | em dash + attention banner + "Open Claude Code", with "Log in again" beside it |
 | `unavailable` | `state-absent` | em dash + info banner + retry time when known |
+
+Every `ok` card carries an age chip (`updated 4m ago`) and a refresh button, whether
+or not the reading is stale. An age that is only shown once it crosses a threshold
+leaves the user unable to tell a current number from one several minutes old — which
+reads as the dashboard being broken. The chip's `title` holds the absolute time.
 
 `severity` from the API always wins over the local 80% threshold — same rule as
 `internal/quota`. The UI never sets a threshold of its own.
@@ -110,9 +115,12 @@ different visual treatment because each has a different fix.
 
 ### Bar list (quota bar)
 
-There are no pie, donut, or line charts. A pie implies the parts sum to a whole; a
-line needs a time series the endpoint does not return. Drawing either would be
-making things up.
+The quota view draws bars rather than a pie or a line, because of what the quota
+endpoint returns: one utilization figure per window. There is no set of parts that
+sums to a whole and no time series, so either chart would be making things up.
+
+That is a statement about quota data, not a ban on charts. Usage records carry a
+timestamp and do sum to a total, so the usage views chart them freely.
 
 Label 140px `--fs-dense` · bar 8px high, `--r-full`, `--teal-600`, width proportional
 to 100% · value right-aligned, `tabular-nums`. Minimum bar width 2px so 1% stays
@@ -196,5 +204,4 @@ number will not scroll.
 counterpart defined and checked — real work, not a line of CSS. It is the one item
 cut from v1. The app ships light-only.
 
-Also absent: pie/donut/line charts (see Bar list), sortable table headers,
-illustrations, toast notifications.
+Also absent: sortable table headers, illustrations, toast notifications.

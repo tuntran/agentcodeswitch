@@ -47,7 +47,26 @@ func Cached(profileName string, now time.Time) Result {
 // stale forever. Nothing obvious fails; `acs quota` just quietly stops updating
 // until someone discovers --force. Subscribe is where stale-while-revalidate
 // belongs, because the UI process actually lives long enough for it.
+//
+// force keeps its published meaning: ignore the cache and any backoff.
 func (r *Reader) Get(ctx context.Context, p profile.Profile, force bool) Result {
+	if force {
+		return r.get(ctx, p, modeForce)
+	}
+	return r.get(ctx, p, modeCache)
+}
+
+// Refresh is what a long-lived process's schedule uses.
+//
+// Deliberately not what the UI buttons call. Routing a button here would make it a
+// no-op exactly when it matters: the retry button only appears on an unavailable
+// card, which is the state that carries Retry-After, so honouring the backoff would
+// mean the click returns the same cached failure and the card redraws identically.
+func (r *Reader) Refresh(ctx context.Context, p profile.Profile) Result {
+	return r.get(ctx, p, modeRefresh)
+}
+
+func (r *Reader) get(ctx context.Context, p profile.Profile, m mode) Result {
 	now := r.now()
 	service := r.store.ServiceName(p.Literal)
 
@@ -60,10 +79,8 @@ func (r *Reader) Get(ctx context.Context, p profile.Profile, force bool) Result 
 	}
 
 	cached, hasCache := loadEntry(p.Name)
-	if !force && hasCache {
-		if cached.fresh(now) || cached.backingOff(now) {
-			return cached.result(p.Name, now)
-		}
+	if hasCache && servesCache(cached, m, now) {
+		return cached.result(p.Name, now)
 	}
 
 	// Reading the secret is what makes macOS prompt, so it happens only after the
@@ -83,7 +100,7 @@ func (r *Reader) Get(ctx context.Context, p profile.Profile, force bool) Result 
 
 	resp, err := r.client.fetch(ctx, cred.AccessToken)
 	if err != nil {
-		return r.fetchFailure(p.Name, err, cached, hasCache, now)
+		return r.fetchFailure(p.Name, err, cached, hasCache, now, m)
 	}
 
 	res := mapResponse(resp, now)
@@ -99,7 +116,7 @@ func (r *Reader) Get(ctx context.Context, p profile.Profile, force bool) Result 
 // five minutes ago is useful -- but they go into LastKnown, never into the live
 // windows. The windows staying nil is what makes "draw a bar" reduce to
 // `State == StateOK` for every consumer.
-func (r *Reader) fetchFailure(profileName string, err error, cached entry, hasCache bool, now time.Time) Result {
+func (r *Reader) fetchFailure(profileName string, err error, cached entry, hasCache bool, now time.Time, m mode) Result {
 	if errors.Is(err, errUnauthorized) {
 		// The credential was rejected outright. The fix is the same as an expiry:
 		// authenticate again.
@@ -111,7 +128,14 @@ func (r *Reader) fetchFailure(profileName string, err error, cached entry, hasCa
 
 	var throttled throttleError
 	if errors.As(err, &throttled) {
-		step := cached.BackoffStep + 1
+		// A human override does not lengthen the schedule's penalty. Someone clicking
+		// refresh on a throttled card is allowed through the backoff, so letting each
+		// click climb the ladder would mean their impatience stalls the background
+		// loop for up to half an hour -- the opposite of what they asked for.
+		step := cached.BackoffStep
+		if m != modeForce {
+			step++
+		}
 		delay := throttled.retryAfter
 		if delay <= 0 {
 			delay = backoffDelay(step)
@@ -164,45 +188,4 @@ func (r *Reader) GetAll(ctx context.Context, profiles []profile.Profile, force b
 		out = append(out, r.Get(ctx, p, force))
 	}
 	return out
-}
-
-// Subscribe streams results for a long-lived caller: cached values first, then
-// refreshed ones, then a refresh every interval.
-//
-// This is the real stale-while-revalidate, and it is safe here precisely because
-// the UI process outlives the fetch. Do not reach for it from the CLI.
-func (r *Reader) Subscribe(ctx context.Context, profiles []profile.Profile, interval time.Duration) <-chan Result {
-	ch := make(chan Result)
-	go func() {
-		defer close(ch)
-		for _, p := range profiles {
-			if !send(ctx, ch, Cached(p.Name, r.now())) {
-				return
-			}
-		}
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for {
-			for _, p := range profiles {
-				if !send(ctx, ch, r.Get(ctx, p, false)) {
-					return
-				}
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
-		}
-	}()
-	return ch
-}
-
-func send(ctx context.Context, ch chan<- Result, res Result) bool {
-	select {
-	case ch <- res:
-		return true
-	case <-ctx.Done():
-		return false
-	}
 }

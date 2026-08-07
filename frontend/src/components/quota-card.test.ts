@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { renderQuotaCard } from "./quota-card";
+import { formatAge, renderQuotaCard } from "./quota-card";
 import type { QuotaState, QuotaView } from "../types";
 
 function quota(overrides: Partial<QuotaView> = {}): QuotaView {
@@ -38,7 +38,9 @@ const failureStates: Array<{
   {
     state: "expired",
     message: "access token expired -- run `acs per` or `acs login per`",
-    expectAction: "Log in again",
+    // Not "Log in again": Claude Code refreshes the token on start, so starting it
+    // is the remedy. Logging in again is the fallback, one button over.
+    expectAction: "Open Claude Code",
   },
   {
     state: "unavailable",
@@ -192,7 +194,7 @@ describe("renderQuotaCard ok state", () => {
     expect(fills[1].classList.contains("bar-row__fill--attention")).toBe(true);
   });
 
-  it("labels stale numbers with their fetch time", () => {
+  it("labels stale numbers as stale, with their age", () => {
     const card = renderQuotaCard(
       quota({
         stale: true,
@@ -202,15 +204,21 @@ describe("renderQuotaCard ok state", () => {
 
     const chip = card.querySelector(".chip");
     expect(chip?.textContent).toContain("stale");
-    expect(chip?.textContent).toContain("fetched");
+    expect(chip?.textContent).toContain("ago");
   });
 
-  it("does not label fresh numbers as stale", () => {
+  // The age is shown even when the number is current. Without it, a reading from ten
+  // minutes ago looks exactly like one from a second ago, which is what made the
+  // dashboard feel stuck while it was working correctly.
+  it("shows the age of fresh numbers without calling them stale", () => {
     const card = renderQuotaCard(
       quota({ fiveHour: { utilization: 5, resetsAt: "", severity: "neutral" } }),
     );
 
-    expect(card.querySelector(".chip")).toBeNull();
+    const chip = card.querySelector(".chip");
+    expect(chip, "an ok card must always say how old its numbers are").not.toBeNull();
+    expect(chip?.textContent).toContain("updated");
+    expect(chip?.textContent).not.toContain("stale");
   });
 
   it("clamps a bar to at least 2px so 1% stays visible", () => {
@@ -260,5 +268,139 @@ describe("renderQuotaCard actions", () => {
     );
 
     expect(card.textContent).toContain("retry at");
+  });
+});
+
+describe("formatAge", () => {
+  const base = new Date("2026-07-30T10:00:00Z");
+
+  it("reads an unknown timestamp as unknown, never as 1970", () => {
+    expect(formatAge("", base)).toBe("unknown");
+    expect(formatAge("not-a-date", base)).toBe("unknown");
+  });
+
+  it("describes recent readings as current", () => {
+    expect(formatAge("2026-07-30T09:59:55Z", base)).toBe("just now");
+  });
+
+  it("scales the unit with the age", () => {
+    expect(formatAge("2026-07-30T09:59:30Z", base)).toBe("30s ago");
+    expect(formatAge("2026-07-30T09:56:00Z", base)).toBe("4m ago");
+    expect(formatAge("2026-07-30T07:00:00Z", base)).toBe("3h ago");
+    expect(formatAge("2026-07-28T10:00:00Z", base)).toBe("2d ago");
+  });
+
+  it("treats a future timestamp as current rather than negative", () => {
+    expect(formatAge("2026-07-30T10:05:00Z", base)).toBe("just now");
+  });
+});
+
+describe("the ok card's refresh control", () => {
+  const okQuota = () =>
+    quota({ fiveHour: { utilization: 5, resetsAt: "", severity: "neutral" } });
+
+  it("asks for a refresh with the profile name", () => {
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+    const card = renderQuotaCard(okQuota(), { onRefresh });
+
+    card.querySelector<HTMLButtonElement>(".quota-card__refresh")?.click();
+
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(onRefresh).toHaveBeenCalledWith("per");
+  });
+
+  it("disables itself while the refresh is in flight", () => {
+    const onRefresh = vi.fn().mockReturnValue(new Promise(() => {}));
+    const card = renderQuotaCard(okQuota(), { onRefresh });
+    const button = card.querySelector<HTMLButtonElement>(".quota-card__refresh");
+
+    button?.click();
+
+    expect(button?.disabled).toBe(true);
+    // The label survives so the button keeps its accessible name.
+    expect(button?.textContent).toBe("Refresh");
+    expect(button?.getAttribute("aria-busy")).toBe("true");
+  });
+
+  // Without this the button stays disabled after a failure, with nothing on screen
+  // saying why, until the user navigates away and back. The card is only replaced on
+  // success, so recovery has to happen here.
+  it("re-enables itself when the refresh fails", async () => {
+    const onRefresh = vi.fn().mockRejectedValue(new Error("endpoint down"));
+    const card = renderQuotaCard(okQuota(), { onRefresh });
+    const button = card.querySelector<HTMLButtonElement>(".quota-card__refresh");
+
+    button?.click();
+    expect(button?.disabled).toBe(true);
+
+    // Let the rejection settle.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(button?.disabled).toBe(false);
+    expect(button?.hasAttribute("aria-busy")).toBe(false);
+  });
+});
+
+describe("an expired token points at Claude Code, not at a fresh login", () => {
+  const expiredQuota = () =>
+    quota({ state: "expired", message: "access token expired" });
+
+  it("makes launching Claude Code the primary action", () => {
+    const onLaunch = vi.fn();
+    const onLogin = vi.fn();
+    const card = renderQuotaCard(expiredQuota(), { onLaunch, onLogin });
+
+    const buttons = card.querySelectorAll("button");
+    expect(buttons[0].textContent).toBe("Open Claude Code");
+    // Weighted, not merely first: two identical-looking buttons make "primary"
+    // meaningless.
+    expect(buttons[0].classList.contains("btn--primary")).toBe(true);
+    expect(buttons[1].classList.contains("btn--primary")).toBe(false);
+    buttons[0].click();
+
+    expect(onLaunch).toHaveBeenCalledWith("per");
+    expect(
+      onLogin,
+      "the primary action must not send them to login",
+    ).not.toHaveBeenCalled();
+  });
+
+  it("keeps logging in again available as a fallback", () => {
+    const onLogin = vi.fn();
+    const card = renderQuotaCard(expiredQuota(), { onLogin });
+
+    const buttons = Array.from(card.querySelectorAll("button"));
+    const fallback = buttons.find((b) => b.textContent === "Log in again");
+    expect(fallback, "a dead refresh token still needs a way out").toBeDefined();
+
+    fallback?.click();
+    expect(onLogin).toHaveBeenCalledWith("per");
+  });
+});
+
+// The other three failure states must keep the actions they had.
+describe("the remaining failure states are untouched", () => {
+  it("sends no_login and missing_scope to login", () => {
+    for (const state of ["no_login", "missing_scope"] as const) {
+      const onLogin = vi.fn();
+      const card = renderQuotaCard(quota({ state, message: "x" }), { onLogin });
+      card.querySelector("button")?.click();
+      expect(onLogin, state).toHaveBeenCalledWith("per");
+    }
+  });
+
+  it("sends unavailable to retry", () => {
+    const onRetry = vi.fn();
+    const onLogin = vi.fn();
+    const card = renderQuotaCard(quota({ state: "unavailable", message: "x" }), {
+      onRetry,
+      onLogin,
+    });
+
+    card.querySelector("button")?.click();
+
+    expect(onRetry).toHaveBeenCalledWith("per");
+    expect(onLogin).not.toHaveBeenCalled();
   });
 });

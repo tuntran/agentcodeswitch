@@ -119,6 +119,13 @@ func (a *App) CreateProfileEntry(name, label string) (ProfileView, error) {
 // LaunchLoginTerminal opens Terminal.app running `acs login <name>`.
 func (a *App) LaunchLoginTerminal(name string) error { return launchLoginTerminal(name) }
 
+// LaunchProfileTerminal opens Terminal.app running `acs <name>`.
+//
+// This is the fix for an expired access token: Claude Code refreshes it on start, so
+// starting Claude Code is the whole remedy. `acs` itself stays read-only on
+// credentials.
+func (a *App) LaunchProfileTerminal(name string) error { return launchProfileTerminal(name) }
+
 // PollLoginDone reports whether a login has completed.
 //
 // Both halves are required: a Keychain item can exist while the config dir has no

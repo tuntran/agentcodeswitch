@@ -42,6 +42,9 @@ export const createProfileEntry = (
 export const launchLoginTerminal = (name: string): Promise<void> =>
   App.LaunchLoginTerminal(name) as Promise<void>;
 
+export const launchProfileTerminal = (name: string): Promise<void> =>
+  App.LaunchProfileTerminal(name) as Promise<void>;
+
 export const pollLoginDone = (name: string): Promise<boolean> =>
   App.PollLoginDone(name) as Promise<boolean>;
 

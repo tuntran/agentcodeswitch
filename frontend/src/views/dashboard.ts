@@ -4,6 +4,7 @@ import {
   cachedQuota,
   getQuota,
   launchLoginTerminal,
+  launchProfileTerminal,
   listProfiles,
   onQuotaUpdated,
   subscribeQuota,
@@ -120,11 +121,23 @@ function buildCard(quota: QuotaView): HTMLElement {
         activeGrid?.append(errorNote(err));
       });
     },
+    onLaunch: (name) => {
+      void launchProfileTerminal(name).catch((err) => {
+        activeGrid?.append(errorNote(err));
+      });
+    },
     onRetry: (name) => {
       void getQuota(name, true).then(replaceCard, (err) => {
         activeGrid?.append(errorNote(err));
       });
     },
+    // Returned rather than swallowed: the card uses it to drive the button's
+    // in-flight state and to restore it if this rejects.
+    onRefresh: (name) =>
+      getQuota(name, true).then(replaceCard, (err) => {
+        activeGrid?.append(errorNote(err));
+        throw err;
+      }),
   });
 }
 
