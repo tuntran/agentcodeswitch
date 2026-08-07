@@ -78,6 +78,19 @@ func (r *Reader) get(ctx context.Context, p profile.Profile, m mode) Result {
 		return r.stateResult(p.Name, StateNoLogin, "", now)
 	}
 
+	// Everything from here to the last saveEntry is one read-modify-write on this
+	// profile's cache file, so it happens under that profile's lock. Unserialised,
+	// the scheduled refresh and a click on Refresh both read the same entry and
+	// whichever finishes last writes a whole entry rebuilt from what it read at the
+	// top -- silently dropping either a reading that is already on screen or a
+	// Retry-After the endpoint asked us to honour.
+	//
+	// The error is intentionally ignored: it means the cache directory is unusable,
+	// saveEntry is about to fail on the same directory, and a caller waiting on
+	// quota is better served by live numbers than by an error about a cache.
+	unlock, _ := lockProfile(p.Name)
+	defer unlock()
+
 	cached, hasCache := loadEntry(p.Name)
 	if hasCache && servesCache(cached, m, now) {
 		return cached.result(p.Name, now)

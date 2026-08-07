@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -725,5 +726,57 @@ func TestFloorToleratesAClockInTheFuture(t *testing.T) {
 	r.Refresh(context.Background(), p)
 	if got := calls.Load(); got != 1 {
 		t.Errorf("requests = %d, want 1 -- a future timestamp must not park refreshes forever", got)
+	}
+}
+
+// TestConcurrentFetchesKeepTheSuccessfulReading pins the cache against the one
+// pairing that makes its read-modify-write reachable: the refresh loop and the
+// card's Refresh button fetching the same profile at the same moment.
+//
+// The throttled path rebuilds the entire entry from the snapshot it read on entry
+// to get. Unserialised, a 429 landing after a 200 writes that 200 back out of
+// existence -- so the dashboard keeps painting numbers the cache no longer holds,
+// and `acs quota` in a terminal reports the profile as unavailable.
+func TestConcurrentFetchesKeepTheSuccessfulReading(t *testing.T) {
+	p, store := testProfile(t)
+	now := time.Now()
+
+	// The first caller through succeeds; everyone after is throttled, and slowly, so
+	// that an unlocked build reliably writes the stale rebuild last.
+	var calls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(fullResponse))
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+		w.Header().Set("Retry-After", "900")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	t.Cleanup(srv.Close)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// force: what the Refresh button sends, and the mode that skips every
+			// cache check and so always reaches the fetch.
+			newReaderFor(store, srv.URL, now).Get(context.Background(), p, true)
+		}()
+	}
+	wg.Wait()
+
+	e, ok := loadEntry(p.Name)
+	if !ok {
+		t.Fatal("no cache entry survived two concurrent fetches")
+	}
+	if e.FiveHour == nil {
+		t.Error("the successful reading was lost: the throttled write rebuilt the entry " +
+			"from a snapshot taken before that reading landed")
+	}
+	if e.RetryAfter == nil {
+		t.Error("Retry-After was lost: the endpoint asked us to wait and the cache did not record it")
 	}
 }

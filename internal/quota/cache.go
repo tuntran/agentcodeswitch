@@ -41,9 +41,11 @@ type entry struct {
 
 // cacheDir is where per-profile cache files live.
 //
-// One file per profile means concurrent writes touch different files, so unlike
-// config.json this needs no lock: the worst case is one profile's numbers being
-// rewritten twice.
+// One file per profile keeps unrelated profiles off each other's way, but it does
+// not make a write safe on its own: readers of the same profile rebuild the whole
+// entry from what they last read, so two of them racing lose one of the results
+// outright. saveEntry publishing by rename prevents a torn file, not a lost
+// update. lockProfile is what orders them.
 func cacheDir() string { return filepath.Join(config.Home(), "cache") }
 
 func cachePath(profileName string) string {
