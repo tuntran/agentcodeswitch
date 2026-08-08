@@ -272,6 +272,50 @@ body {
   background: var(--white);
 }
 
+/* Inline variant: sits inside a table cell without pushing the row taller than
+   --row-h, which every other cell is sized against. */
+.input--inline {
+  padding: var(--sp-1) var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  width: 180px;
+}
+
+/* Model field */
+.model-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* The 1M-context checkbox. A label wrapper so the word is a hit target too, not
+   just the 13px box. */
+.model-field__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-caption);
+  color: var(--ink-500);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.model-field__toggle:has(input:disabled) {
+  color: var(--ink-400);
+  cursor: default;
+}
+
+/* Save feedback and validation errors. Sized so a long error scrolls with the
+   table instead of wrapping the row to three lines. */
+.model-field__status {
+  font-size: var(--fs-caption);
+  color: var(--ink-400);
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Table, compact scale.
    The accounts table carries three copy fields and a button pair, so its
    min-content width exceeds the window. The overflow is given a scroll container

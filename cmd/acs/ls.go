@@ -16,6 +16,7 @@ type lsRow struct {
 	Label    string `json:"label,omitempty"`
 	Email    string `json:"email,omitempty"`
 	Plan     string `json:"plan,omitempty"`
+	Model    string `json:"model,omitempty"`
 	Keychain string `json:"keychain"`
 	LoggedIn bool   `json:"loggedIn"`
 	Quota    string `json:"quota"`
@@ -53,10 +54,13 @@ func cmdLs(args []string) error {
 		}
 		id := p.ResolvedIdentity()
 		rows = append(rows, lsRow{
-			Name:     p.Name,
-			Label:    p.Label,
-			Email:    id.Email,
-			Plan:     id.SubscriptionType,
+			Name:  p.Name,
+			Label: p.Label,
+			Email: id.Email,
+			Plan:  id.SubscriptionType,
+			// The effective id, suffix included: this column exists to answer
+			// "what will `acs <name>` actually run", not "what is stored".
+			Model:    p.ModelID(),
 			Keychain: shortService(service),
 			LoggedIn: exists,
 			Quota:    cachedQuotaLabel(p.Name),
@@ -78,14 +82,14 @@ func printLs(rows []lsRow) {
 		return
 	}
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "PROFILE\tLABEL\tACCOUNT\tPLAN\tKEYCHAIN\tQUOTA")
+	_, _ = fmt.Fprintln(tw, "PROFILE\tLABEL\tACCOUNT\tPLAN\tMODEL\tKEYCHAIN\tQUOTA")
 	for _, r := range rows {
 		state := r.Keychain
 		if !r.LoggedIn {
 			state = "not logged in"
 		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
-			r.Name, dash(r.Label), dash(r.Email), dash(r.Plan), state, r.Quota)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			r.Name, dash(r.Label), dash(r.Email), dash(r.Plan), dash(r.Model), state, r.Quota)
 	}
 	_ = tw.Flush()
 }

@@ -11,6 +11,8 @@ vi.mock("../bindings", () => ({
   listProfiles: vi.fn(),
   pollLoginDone: vi.fn(),
   removeProfile: vi.fn(),
+  setProfileModel: vi.fn(),
+  setProfileContext1M: vi.fn(),
 }));
 
 import { listProfiles } from "../bindings";
@@ -22,6 +24,8 @@ const profile: ProfileView = {
   label: "Personal",
   email: "person@example.com",
   plan: "claude_max",
+  model: "",
+  context1m: true,
   keychainHash: "707f7e46",
   loggedIn: true,
   orgId: "4e2622e5-e411-4e08-990a-7afa00000000",
@@ -47,7 +51,7 @@ describe("renderAccounts", () => {
   it("gives the table its own horizontal overflow", async () => {
     const container = await renderTable();
 
-    // Without this wrapper the eight columns widen the document itself, and the
+    // Without this wrapper the columns widen the document itself, and the
     // page scrolls sideways with the topbar and heading going off screen.
     const scroll = container.querySelector(".table-scroll");
     expect(scroll?.querySelector(":scope > table.table")).not.toBeNull();

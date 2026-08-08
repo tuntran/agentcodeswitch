@@ -106,6 +106,27 @@ func (p Profile) ResolvedIdentity() config.Identity {
 	}
 }
 
+// SameAccount reports profiles that share an email with another profile.
+//
+// Worth warning about, never worth blocking: two config dirs on one account is a
+// legitimate setup, for instance different settings per project.
+func SameAccount(profiles []Profile) map[string][]string {
+	byEmail := map[string][]string{}
+	for _, p := range profiles {
+		if p.Cached.Email == "" {
+			continue
+		}
+		byEmail[p.Cached.Email] = append(byEmail[p.Cached.Email], p.Name)
+	}
+	dupes := map[string][]string{}
+	for email, names := range byEmail {
+		if len(names) > 1 {
+			dupes[email] = names
+		}
+	}
+	return dupes
+}
+
 // RedactEmail shortens an address to "a***@example.com".
 //
 // Used everywhere acs writes an email somewhere it might outlive the terminal --

@@ -39,6 +39,16 @@ export const createProfileEntry = (
 ): Promise<ProfileView> =>
   App.CreateProfileEntry(name, label) as Promise<ProfileView>;
 
+/** Takes effect on the next launch. An empty model clears the profile's default. */
+export const setProfileModel = (name: string, model: string): Promise<void> =>
+  App.SetProfileModel(name, model) as Promise<void>;
+
+/** Takes effect on the next launch. */
+export const setProfileContext1M = (
+  name: string,
+  on: boolean,
+): Promise<void> => App.SetProfileContext1M(name, on) as Promise<void>;
+
 export const launchLoginTerminal = (name: string): Promise<void> =>
   App.LaunchLoginTerminal(name) as Promise<void>;
 

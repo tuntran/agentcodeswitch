@@ -1,5 +1,6 @@
 import { renderCopyField } from "../components/copy-field";
 import { emptyState } from "../components/empty-state";
+import { renderModelField } from "../components/model-field";
 import {
   cancelAdd,
   createProfileEntry,
@@ -8,6 +9,8 @@ import {
   listProfiles,
   pollLoginDone,
   removeProfile,
+  setProfileContext1M,
+  setProfileModel,
 } from "../bindings";
 import type { ProfileView } from "../types";
 
@@ -68,7 +71,7 @@ function table(profiles: ProfileView[], container: HTMLElement): HTMLElement {
   el.className = "table";
   el.innerHTML =
     "<thead><tr><th>Profile</th><th>Label</th><th>Account</th><th>Plan</th>" +
-    "<th>Keychain</th><th>Config dir</th><th>Org</th><th></th></tr></thead>";
+    "<th>Model</th><th>Keychain</th><th>Config dir</th><th>Org</th><th></th></tr></thead>";
 
   const tbody = document.createElement("tbody");
   for (const profile of profiles) {
@@ -76,8 +79,8 @@ function table(profiles: ProfileView[], container: HTMLElement): HTMLElement {
   }
   el.append(tbody);
 
-  // The table owns its horizontal overflow. Without this wrapper the eight
-  // columns widen the document itself and the topbar scrolls out of reach.
+  // The table owns its horizontal overflow. Without this wrapper the columns
+  // widen the document itself and the topbar scrolls out of reach.
   //
   // Focusable and named on purpose: WebKit, which is the engine here, does not
   // hand a scroll container to the keyboard the way Chrome does, so without
@@ -101,6 +104,20 @@ function row(profile: ProfileView, container: HTMLElement): HTMLElement {
     cell(profile.email || "—"),
     cell(profile.plan || "—"),
   );
+
+  // Edited in place rather than behind a dialog: it is one field, and it is the
+  // one thing here that is meant to be changed often.
+  const model = document.createElement("td");
+  model.append(
+    renderModelField({
+      profileName: profile.name,
+      model: profile.model,
+      context1m: profile.context1m,
+      saveModel: setProfileModel,
+      saveContext1M: setProfileContext1M,
+    }),
+  );
+  tr.append(model);
 
   const keychain = document.createElement("td");
   keychain.append(

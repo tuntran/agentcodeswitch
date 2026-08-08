@@ -57,6 +57,10 @@ export interface ProfileView {
   label: string;
   email: string;
   plan: string;
+  /** Without the "[1m]" suffix. "" means Claude Code decides, which is a real state. */
+  model: string;
+  /** Extended context, on by default. Has no effect while `model` is empty. */
+  context1m: boolean;
   keychainHash: string;
   loggedIn: boolean;
   orgId: string;

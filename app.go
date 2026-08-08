@@ -116,6 +116,21 @@ func (a *App) CreateProfileEntry(name, label string) (ProfileView, error) {
 	return toProfileView(p, a.store), nil
 }
 
+// SetProfileModel records the profile's default model, exported as ANTHROPIC_MODEL
+// the next time the profile launches. An empty string clears it.
+//
+// It takes effect on the next launch only: a running `claude` read its environment
+// at exec time and cannot be moved to another model from here. The same goes for
+// SetProfileContext1M.
+func (a *App) SetProfileModel(name, model string) error {
+	return profile.SetModel(name, model)
+}
+
+// SetProfileContext1M turns the 1M-token context window on or off for a profile.
+func (a *App) SetProfileContext1M(name string, on bool) error {
+	return profile.SetContext1M(name, on)
+}
+
 // LaunchLoginTerminal opens Terminal.app running `acs login <name>`.
 func (a *App) LaunchLoginTerminal(name string) error { return launchLoginTerminal(name) }
 

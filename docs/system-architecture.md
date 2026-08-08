@@ -139,6 +139,14 @@ that stops honouring it surfaces as a report instead of a silent no-op.
 `dir` valid while `configDirLiteral` goes stale — doctor catches that and tells you
 to log in again.
 
+Schema `version` is 2 as of the per-profile model. It moved because adding a field
+does not stop an older `acs` from *parsing* the file — which is the danger, not the
+protection. An `acs` still on 1 would read a 2 file as valid, discard `model` and
+`noContext1m` at unmarshal, and write them away on its next save. A mixed install
+is normal here rather than hypothetical: the `.app` and the CLI are separate
+binaries replaced at different times. Refusing to load is the loud failure that
+silent data loss is not.
+
 Every `config.json` write takes `flock` on `config.lock` and does load-modify-save
 inside the lock. Atomic rename alone prevents corruption but not lost updates, and
 running the UI and CLI at once is the normal case. Per-profile cache files are
@@ -235,6 +243,30 @@ ANTHROPIC_API_KEY  ANTHROPIC_AUTH_TOKEN  CLAUDE_CODE_OAUTH_TOKEN
 ANTHROPIC_BASE_URL  ANTHROPIC_BEDROCK_BASE_URL  ANTHROPIC_VERTEX_PROJECT_ID
 CLAUDE_CODE_USE_BEDROCK  CLAUDE_CODE_USE_VERTEX  CLAUDE_CODE_USE_FOUNDRY
 ```
+
+`ANTHROPIC_MODEL` is deliberately not on that list. Those nine decide which account
+pays and are always stripped; the model only decides which model answers, so it
+follows a different rule: a profile that names a model replaces any inherited one,
+and a profile that does not leaves the inherited value alone. Stripping it
+unconditionally would make `acs` undo a shell-level default it was never told
+about. A `--model` flag still beats both, because Claude Code resolves it that way.
+
+The value lives in `config.json`, not in a profile's `settings.json`: that file is
+symlinked from `~/.claude` and shared by every profile, so a model written there
+would move all of them at once.
+
+The `[1m]` suffix that asks for the 1M-token context window is a separate boolean,
+composed onto the name by `Profile.ModelID` rather than stored with it, so turning
+it off returns the plain name instead of leaving a half-edited id. It is stored
+inverted, as `noContext1m`, because the default is on: a positive field would read
+as false in a `config.json` written before the option existed and would silently
+turn 1M off for every profile on upgrade.
+
+`ModelID` appends the suffix without consulting a table of which models have a 1M
+window. That table would go stale exactly like a whitelist of model names, and
+being wrong would block a model rather than merely mis-size its window. Haiku has
+no 1M variant and Sonnet 5 needs no suffix; the per-profile option is the answer
+for both.
 
 Login is different: `internal/login` uses `exec.Command` with inherited stdio,
 because `acs` must keep running afterwards to verify the result. That also means

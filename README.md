@@ -79,7 +79,7 @@ per Go file, no tokens in the cache, no full email addresses in `plans/reports/`
 | `acs add <name> [--email addr]` | create profile, delegate to `claude auth login` |
 | `acs login <name>` | re-authenticate an existing profile |
 | `acs link <name> [--replace]` | share skills, agents, hooks and settings with `~/.claude` |
-| `acs ls` | profiles, identity and cached quota — never hits the network |
+| `acs ls` | profiles, identity, default model and cached quota — never hits the network |
 | `acs <name> [claude args…]` | launch `claude` for that profile, args passed through |
 | `acs quota [--json] [--force]` | live quota for every profile |
 | `acs doctor [--deep] [--json]` | self-check; `--deep` reads secrets (Keychain prompt) |
@@ -114,6 +114,52 @@ declare them under `mcpServers` in `settings.json` to share them.
 
 `acs doctor` reports the link status and whether the first-run wizard will appear, so
 neither is invisible.
+
+## A default model per profile
+
+Each profile can pin the model it launches with. `acs ui` → Accounts → the Model
+column; the field is free text, so a model released after your build is typeable on
+its first day and a wrong id fails as claude's own error, which names it. An empty
+field means Claude Code chooses, which is not the same as any particular model.
+
+Beside it is a **1M** checkbox, on by default. It appends Claude Code's `[1m]`
+suffix — `claude-opus-4-8` becomes `claude-opus-4-8[1m]` — and turning it off gives
+the plain name back, because the suffix is stored as the option and never as part
+of the name. Pasting `claude-opus-4-8[1m]` into the field ticks the box instead of
+keeping the brackets in the name.
+
+`acs` appends the suffix without checking whether that model has a 1M window: it
+keeps no model table, for the same reason it has no whitelist of names. Two cases
+where you want the box off, per the [Claude Code docs](https://code.claude.com/docs/en/model-config#extended-context):
+
+- **Haiku** has no 1M variant, so the suffix makes the id invalid.
+- **Sonnet 5** already runs 1M natively on the Anthropic API and needs no suffix.
+
+Opus is where the box earns its place. On Max, Team and Enterprise the 1M window is
+included; on Pro it draws on usage credits.
+
+`acs ls` shows the effective id, suffix included, and `acs <name>` applies it by
+exporting `ANTHROPIC_MODEL`. Two rules follow:
+
+- A profile that names a model replaces one exported in your shell. A profile that
+  does not leaves your shell's value alone.
+- `acs per --model sonnet` still wins for that one run: the flag beats the variable.
+
+This only chooses the model a session *starts* on. `/model` inside Claude Code
+overrides it for that session as usual — but note that confirming a pick in the
+`/model` picker also saves it to `~/.claude/settings.json`, which every profile
+shares by symlink. A profile that names a model is unaffected, because
+`ANTHROPIC_MODEL` outranks the `model` setting; a profile that names none will
+follow whatever `/model` last saved, from any profile.
+
+The dropdown suggestions are a hand-maintained list in
+`frontend/src/components/model-field.ts` — add a new model there and rebuild. It is
+not fetched from anywhere: no endpoint returns the models an account may use, so
+anything automatic would go stale without saying so. Being out of date costs one
+dropdown entry, since the field takes any text.
+
+It is not in the profile's `settings.json` because that file is shared by symlink —
+a model written there would move every profile at once.
 
 ## Your Claude Code history is irreplaceable
 
