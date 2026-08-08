@@ -35,7 +35,7 @@ func TestEnvironStripsAuthVars(t *testing.T) {
 		base = append(base, v+"=1")
 	}
 
-	got, err := Environ(base, lit)
+	got, err := Environ(base, lit, "")
 	if err != nil {
 		t.Fatalf("Environ: %v", err)
 	}
@@ -83,16 +83,80 @@ func TestAuthVarsCoversEveryPrecedenceGroup(t *testing.T) {
 	}
 }
 
+// TestEnvironModel pins the precedence rule between a profile's model and one
+// inherited from the shell.
+//
+// The asymmetry is the point. A profile with a model owns the variable, so a
+// stale inherited value cannot survive next to it. A profile without one owns
+// nothing, so `export ANTHROPIC_MODEL=...` has to keep working through acs --
+// dropping it would make acs silently undo a setting it was never told about.
+func TestEnvironModel(t *testing.T) {
+	lit := mustLiteral(t, "/Users/x/.acs/profiles/per")
+
+	tests := []struct {
+		name      string
+		inherited string
+		model     string
+		want      string
+	}{
+		{"profile model, nothing inherited", "", "claude-opus-5", "claude-opus-5"},
+		{"profile model wins over inherited", "claude-sonnet-5", "claude-opus-5", "claude-opus-5"},
+		{"no profile model keeps the inherited one", "claude-sonnet-5", "", "claude-sonnet-5"},
+		{"no model anywhere", "", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			base := []string{"PATH=/usr/bin"}
+			if tt.inherited != "" {
+				base = append(base, ModelVar+"="+tt.inherited)
+			}
+			got, err := Environ(base, lit, tt.model)
+			if err != nil {
+				t.Fatalf("Environ: %v", err)
+			}
+
+			var value string
+			for _, kv := range got {
+				if k, v, _ := strings.Cut(kv, "="); k == ModelVar {
+					value = v
+				}
+			}
+			if value != tt.want {
+				t.Errorf("%s = %q, want %q", ModelVar, value, tt.want)
+			}
+			// Counted, not just read: "" as a value and "" as absent are
+			// different environments, and reading the value alone cannot tell
+			// them apart. Two of the same variable is also how a wrong one wins
+			// by ordering.
+			want := 1
+			if tt.want == "" {
+				want = 0
+			}
+			if n := countVar(got, ModelVar); n != want {
+				t.Errorf("%s appears %d times, want %d", ModelVar, n, want)
+			}
+		})
+	}
+}
+
+// The model decides which model answers, not which account pays. Stripping it the
+// way AuthVars are stripped would break a shell-level default for every profile.
+func TestModelVarIsNotAnAuthVar(t *testing.T) {
+	if slices.Contains(AuthVars, ModelVar) {
+		t.Errorf("%s is in AuthVars; it would be stripped even when no profile sets one", ModelVar)
+	}
+}
+
 func TestEnvironRejectsZeroLiteral(t *testing.T) {
 	var zero profile.ConfigDirLiteral
-	if _, err := Environ([]string{"PATH=/usr/bin"}, zero); err == nil {
+	if _, err := Environ([]string{"PATH=/usr/bin"}, zero, ""); err == nil {
 		t.Error("Environ accepted the zero literal; claude would use the default config dir")
 	}
 }
 
 func TestEnvironIgnoresMalformedEntries(t *testing.T) {
 	lit := mustLiteral(t, "/Users/x/.acs/profiles/per")
-	got, err := Environ([]string{"NOEQUALS", "OK=1"}, lit)
+	got, err := Environ([]string{"NOEQUALS", "OK=1"}, lit, "")
 	if err != nil {
 		t.Fatalf("Environ: %v", err)
 	}

@@ -23,6 +23,12 @@ type Profile struct {
 	Dir     string // absolute, for file access
 	Literal ConfigDirLiteral
 	Label   string
+	// Model is the default model for this profile, or "" to leave the choice to
+	// Claude Code. It never carries the "[1m]" suffix: that is Context1M. Use
+	// ModelID for the string Claude Code is actually given.
+	Model string
+	// Context1M asks for the 1M-token context window. Default on; see ModelID.
+	Context1M bool
 	// Cached is the identity recorded at login time. It can be empty for a
 	// profile that was created but never authenticated.
 	Cached config.Identity
@@ -83,12 +89,22 @@ func resolve(name string, e config.Entry) (Profile, error) {
 	if !filepath.IsAbs(dir) {
 		dir = filepath.Join(config.Home(), dir)
 	}
+	// Split on the way in, not only in SetModel: config.json is a file people
+	// edit, and a suffix left in the name would be suffixed again by ModelID.
+	// resolve is the one funnel from storage to Profile, so doing it here is what
+	// makes Model's "never carries the suffix" invariant true for every read.
+	// A suffix present in the file turns the option on, exactly as SetModel does.
+	model, suffixed := SplitContextSuffix(e.Model)
 	return Profile{
 		Name:    name,
 		Dir:     dir,
 		Literal: lit,
 		Label:   e.Label,
-		Cached:  e.Identity,
+		Model:   model,
+		// Stored inverted so that on is the default for an entry that predates
+		// the field. See config.Entry.NoContext1M.
+		Context1M: !e.NoContext1M || suffixed,
+		Cached:    e.Identity,
 	}, nil
 }
 
@@ -173,7 +189,8 @@ func Create(name, label string) (Profile, error) {
 	if err != nil {
 		return Profile{}, err
 	}
-	return Profile{Name: name, Dir: abs, Literal: lit, Label: label}, nil
+	// Context1M mirrors what resolve would report for the entry just written.
+	return Profile{Name: name, Dir: abs, Literal: lit, Label: label, Context1M: true}, nil
 }
 
 // SaveIdentity caches who a profile belongs to, after a login verified it.
@@ -187,25 +204,4 @@ func SaveIdentity(name string, id config.Identity) error {
 		f.Profiles[name] = e
 		return nil
 	})
-}
-
-// SameAccount reports profiles that share an email with another profile.
-//
-// Worth warning about, never worth blocking: two config dirs on one account is a
-// legitimate setup, for instance different settings per project.
-func SameAccount(profiles []Profile) map[string][]string {
-	byEmail := map[string][]string{}
-	for _, p := range profiles {
-		if p.Cached.Email == "" {
-			continue
-		}
-		byEmail[p.Cached.Email] = append(byEmail[p.Cached.Email], p.Name)
-	}
-	dupes := map[string][]string{}
-	for email, names := range byEmail {
-		if len(names) > 1 {
-			dupes[email] = names
-		}
-	}
-	return dupes
 }

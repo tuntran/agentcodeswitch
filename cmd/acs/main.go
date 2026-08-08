@@ -151,7 +151,7 @@ func cmdExec(args []string) error {
 	if len(rest) > 0 && rest[0] == "--" {
 		rest = rest[1:]
 	}
-	return wrap.Exec(p.Literal, rest)
+	return wrap.Exec(p.Literal, p.ModelID(), rest)
 }
 
 func usage(w io.Writer) {

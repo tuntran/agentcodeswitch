@@ -18,7 +18,16 @@ import (
 // Version is the schema version written to disk. A file from a newer acs is an
 // error rather than a guess: silently ignoring fields we do not understand would
 // drop them on the next save.
-const Version = 1
+//
+// 2 added Entry.Model and Entry.NoContext1M. Adding fields does not break an older
+// acs's ability to PARSE the file -- which is exactly the danger, and the reason
+// the number moved. An acs still on 1 would read a 2 file as valid, discard both
+// fields at json.Unmarshal, and marshal them away on its next write: every
+// profile's pinned model gone, with nothing said. A mixed install is the normal
+// case here, not a hypothetical, because the .app and the CLI are separate
+// binaries that get replaced at different times. Refusing to load is the loud
+// failure that data loss is not.
+const Version = 2
 
 // Identity is what `claude auth status --json` reported at login time. Cached so
 // `acs ls` can show who a profile belongs to without touching the network or the
@@ -38,9 +47,22 @@ type Entry struct {
 	// ConfigDirLiteral is the absolute string frozen at `acs add`: exactly what
 	// was put into CLAUDE_CONFIG_DIR, and therefore the input to the Keychain
 	// service name hash. Never recompute it.
-	ConfigDirLiteral string   `json:"configDirLiteral"`
-	Label            string   `json:"label,omitempty"`
-	Identity         Identity `json:"identity,omitzero"`
+	ConfigDirLiteral string `json:"configDirLiteral"`
+	Label            string `json:"label,omitempty"`
+	// Model is the default model this profile launches with, exported as
+	// ANTHROPIC_MODEL. Empty means "whatever Claude Code picks", which is not the
+	// same as any particular model and must stay distinguishable from one.
+	//
+	// It lives here rather than in the profile's settings.json because that file
+	// is symlinked from ~/.claude and shared by every profile: a model written
+	// there would move all of them at once.
+	Model string `json:"model,omitempty"`
+	// NoContext1M is stored inverted so that the default -- extended context on --
+	// survives a config file written before the field existed. A positive
+	// `context1m` would read as false there and silently turn 1M off for every
+	// profile on upgrade. Read it through Profile.Context1M, which flips it back.
+	NoContext1M bool     `json:"noContext1m,omitempty"`
+	Identity    Identity `json:"identity,omitzero"`
 }
 
 // File is the whole config document.

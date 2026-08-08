@@ -28,7 +28,11 @@ func command(lit profile.ConfigDirLiteral, args ...string) (*exec.Cmd, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s not found on PATH: %w", claudeBinary, err)
 	}
-	env, err := wrap.Environ(os.Environ(), lit)
+	// No model: authenticating does not run one, so the profile's is not applied
+	// here. This does not strip an inherited ANTHROPIC_MODEL -- wrap.Environ only
+	// replaces that variable when a model is passed -- which is the same rule
+	// every other launch follows.
+	env, err := wrap.Environ(os.Environ(), lit, "")
 	if err != nil {
 		return nil, err
 	}

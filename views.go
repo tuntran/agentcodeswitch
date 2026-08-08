@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/tuntran/agentcodeswitch/internal/doctor"
-	"github.com/tuntran/agentcodeswitch/internal/profile"
 	"github.com/tuntran/agentcodeswitch/internal/quota"
 )
 
@@ -14,27 +13,6 @@ import (
 //
 // No business rules live here. Deciding that 80% deserves attention belongs in
 // internal/quota, so the CLI and the UI cannot disagree about it.
-
-// ProfileView is one row of the accounts table.
-type ProfileView struct {
-	Name  string `json:"name"`
-	Label string `json:"label"`
-	Email string `json:"email"`
-	Plan  string `json:"plan"`
-	// KeychainHash is the 8-character suffix, which is what doctor and the spike
-	// script show too.
-	KeychainHash string `json:"keychainHash"`
-	LoggedIn     bool   `json:"loggedIn"`
-	// KeychainError is set when the store could not be read at all, which is
-	// different from having no credential: the fix is to unlock the keychain, not
-	// to log in again.
-	KeychainError string `json:"keychainError"`
-	OrgID         string `json:"orgId"`
-	OrgName       string `json:"orgName"`
-	// ConfigDirLiteral is exposed because it is the thing to copy into a bug
-	// report when credentials go missing.
-	ConfigDirLiteral string `json:"configDirLiteral"`
-}
 
 // WindowView is one usage window.
 type WindowView struct {
@@ -100,38 +78,6 @@ type PurgeView struct {
 	JSONLCount int    `json:"jsonlCount"`
 	Oldest     string `json:"oldest"`
 	Newest     string `json:"newest"`
-}
-
-func toProfileView(p profile.Profile, cs profile.CredStore) ProfileView {
-	service := cs.ServiceName(p.Literal)
-	// A lookup failure (a locked keychain, say) is not the same as "no credential".
-	// Reporting it as not-logged-in would send the user to log in again for no
-	// reason, and could talk them into a second credential for one account.
-	exists, err := cs.Exists(service)
-	keychainError := ""
-	if err != nil {
-		keychainError = err.Error()
-	}
-	id := p.ResolvedIdentity()
-	return ProfileView{
-		Name:             p.Name,
-		Label:            p.Label,
-		Email:            id.Email,
-		Plan:             id.SubscriptionType,
-		KeychainHash:     shortService(service),
-		LoggedIn:         exists,
-		KeychainError:    keychainError,
-		OrgID:            id.OrgID,
-		OrgName:          id.OrgName,
-		ConfigDirLiteral: p.Literal.String(),
-	}
-}
-
-func shortService(service string) string {
-	if len(service) > len(profile.ServicePrefix)+1 {
-		return service[len(profile.ServicePrefix)+1:]
-	}
-	return service
 }
 
 func toQuotaView(r quota.Result) QuotaView {

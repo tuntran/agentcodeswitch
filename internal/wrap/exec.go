@@ -16,6 +16,14 @@ import (
 // whose literal value it hashes into the Keychain service name.
 const ConfigDirVar = "CLAUDE_CONFIG_DIR"
 
+// ModelVar is the variable Claude Code reads for its default model.
+//
+// It is not an AuthVar and must not join that list: those are stripped
+// unconditionally because they decide which account pays, while this one only
+// decides which model answers. A `--model` flag on the command line still wins
+// over it, so `acs per --model sonnet` keeps working without acs doing anything.
+const ModelVar = "ANTHROPIC_MODEL"
+
 // AuthVars take precedence over stored credentials, so an inherited one silently
 // defeats the whole point of switching profiles.
 //
@@ -39,11 +47,13 @@ var AuthVars = []string{
 //
 // Shared with internal/login so a login and a later launch cannot disagree about
 // which environment a profile means.
-func Environ(base []string, lit profile.ConfigDirLiteral) ([]string, error) {
+//
+// model is the profile's default, or "" for none.
+func Environ(base []string, lit profile.ConfigDirLiteral, model string) ([]string, error) {
 	if lit.IsZero() {
 		return nil, fmt.Errorf("%s: no config dir literal", ConfigDirVar)
 	}
-	out := make([]string, 0, len(base)+1)
+	out := make([]string, 0, len(base)+2)
 	for _, kv := range base {
 		name, _, ok := strings.Cut(kv, "=")
 		if !ok {
@@ -52,9 +62,21 @@ func Environ(base []string, lit profile.ConfigDirLiteral) ([]string, error) {
 		if name == ConfigDirVar || slices.Contains(AuthVars, name) {
 			continue
 		}
+		// An inherited model is dropped only when the profile names one of its
+		// own. A profile without a model has to keep behaving like plain
+		// `claude`, so an ANTHROPIC_MODEL exported in the shell still applies --
+		// stripping it always would make acs silently undo a setting it was
+		// never asked about.
+		if name == ModelVar && model != "" {
+			continue
+		}
 		out = append(out, kv)
 	}
-	return append(out, ConfigDirVar+"="+lit.String()), nil
+	out = append(out, ConfigDirVar+"="+lit.String())
+	if model != "" {
+		out = append(out, ModelVar+"="+model)
+	}
+	return out, nil
 }
 
 // Exec REPLACES the current process with `claude`.
@@ -68,12 +90,12 @@ func Environ(base []string, lit profile.ConfigDirLiteral) ([]string, error) {
 // TTY ownership and the exit code then pass through untouched, so Ctrl-C reaches
 // `claude` and its exit status reaches the shell. exec.Command plus Wait would
 // have to re-implement all three, badly.
-func Exec(lit profile.ConfigDirLiteral, args []string) error {
+func Exec(lit profile.ConfigDirLiteral, model string, args []string) error {
 	bin, err := exec.LookPath("claude")
 	if err != nil {
 		return fmt.Errorf("claude not found on PATH: %w", err)
 	}
-	env, err := Environ(os.Environ(), lit)
+	env, err := Environ(os.Environ(), lit, model)
 	if err != nil {
 		return err
 	}
